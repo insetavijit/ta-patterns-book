@@ -1,10 +1,16 @@
 [project]
 name = "ta-patterns-book"
 version = "0.1.0"
-description = "Add your description here"
+description = "Technical Analysis Pattern Recognition Book, DuckDB Pattern Memory & Real-Market Example Hunter CLI"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "duckdb>=1.5.5",
+    "matplotlib>=3.11.1",
+    "mplfinance>=0.12.10b0",
+    "seaborn>=0.13.2",
+    "ta-patterns>=1.1.1",
+]
 
 [project.scripts]
 ta-patterns-book = "ta_patterns_book:main"
