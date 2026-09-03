@@ -459,7 +459,8 @@ def main():
     print(f"[+] Detecting patterns in 15-candle lookback prior to Trade #{trade_id} entry...")
     fired_patterns = detect_patterns_for_trade(ohlcv_df, entry_idx, lookback_bars=15, max_patterns=8)
 
-    render_trade_canvas(trade, ohlcv_df, entry_idx, fired_patterns, OUT_FILE)
+    out_file = OUT_DIR / f"trade_{trade_id}_chart.png"
+    render_trade_canvas(trade, ohlcv_df, entry_idx, fired_patterns, out_file)
 
 
 if __name__ == "__main__":
