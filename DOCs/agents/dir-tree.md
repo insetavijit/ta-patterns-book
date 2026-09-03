@@ -10,7 +10,8 @@ This document serves as the authoritative directory structure reference for AI A
 ta-patterns-book/
 ├── __trash/                      # Discard area for temporary drafts / cleanups
 ├── .tmp/                         # Transient scratchpads & build cache
-├── Core/                         # Core domain logic & technical analysis pattern algorithms
+├── Core/                         # Core domain logic & Python source package
+│   └── ta_patterns_book/         # Main package implementation namespace
 ├── DOCs/                         # All documentation, artifacts, notes & guides
 │   ├── agents/                   # Agent operational docs & reference guides
 │   │   └── dir-tree.md           # [This File] Directory tree & file routing guide
@@ -27,14 +28,14 @@ ta-patterns-book/
 │       └── GOAL-3/               # Goal 3 research workspace
 ├── Notebooks/                    # Marimo / Jupyter exploratory notebooks
 ├── Shared/                       # Shared configuration & data assets
-│   ├── Data/                     # Static reference data & schemas
+│   ├── Data/                     # Shared static data fixtures & memory.duckdb
 │   ├── INPs/                     # Raw input datasets (CSVs, Parquets, JSONs)
 │   ├── OUTs/                     # Generated output datasets, plots & exported models
 │   └── cnf.yaml                  # Project configuration file
 ├── Tests/                        # Unit, integration & regression test suites
-├── Utils/                        # Shared utility modules, helpers & converters
-├── src/                          # Main Python source package
-│   └── ta_patterns_book/         # Package implementation namespace
+├── Utils/                        # Registered CLI tools & helper utilities
+│   ├── duckdb_explorer.py        # Interactive DuckDB explorer tool
+│   └── utils.yaml                # Utility tooling specification
 ├── .python-version               # Python version specification
 ├── pyproject.toml                # Project package metadata & uv setup
 ├── GEMINI.md                     # Agent guidelines & context
@@ -58,8 +59,8 @@ When creating or saving files, locate the appropriate directory using the table 
 | **Agent Operational Docs** | `DOCs/agents/` | `dir-tree.md` |
 | **Raw Input Datasets** | `Shared/INPs/` | `btc_1h_2023.csv` |
 | **Generated Charts & Results** | `Shared/OUTs/` | `head_and_shoulders_plot.png` |
-| **Static Reference Data** | `Shared/Data/` | `patterns_catalog.json` |
+| **Static Reference Data & Memory** | `Shared/Data/` | `memory.duckdb` |
 | **Jupyter / Marimo Notebooks** | `Notebooks/` | `01_candlestick_exploration.ipynb` |
 | **Unit & Integration Tests** | `Tests/` | `test_head_and_shoulders.py` |
-| **Core Library Code** | `Core/` or `src/ta_patterns_book/` | `pattern_detector.py` |
-| **Helper Utilities** | `Utils/` | `date_helpers.py` |
+| **Core Library Code** | `Core/ta_patterns_book/` | `pattern_detector.py` |
+| **Helper Utilities & Tools** | `Utils/` | `duckdb_explorer.py` |
