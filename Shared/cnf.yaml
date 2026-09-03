@@ -1,32 +1,97 @@
-# Project Directory Structure & Configuration
+# Project Directory Structure & File Placement Configuration
 
 project:
   name: ta-patterns-book
   package_manager: uv
 
 paths:
-  trash: "__trash"
-  tmp: ".tmp"
-  core: "Core"
+  trash:
+    path: "__trash"
+    purpose: "Temporary discard area for deleted or draft items before cleanup."
+  
+  tmp:
+    path: ".tmp"
+    purpose: "Scratchpads, temporary test outputs, and transient build artifacts."
+
+  core:
+    path: "Core"
+    purpose: "Primary domain models, technical analysis algorithms, and core business logic."
+
   docs:
     root: "DOCs"
-    artifacts: "DOCs/Artifacts"
-    adrs: "DOCs/Artifacts/ADRs"
-    bugs: "DOCs/Artifacts/BUGs"
-    plans: "DOCs/Artifacts/PLans"
-    guids: "DOCs/GUIDs"
+    agents:
+      path: "DOCs/agents"
+      dir_tree: "DOCs/agents/dir-tree.md"
+      purpose: "Agent operational docs and project hierarchy references."
+    artifacts:
+      adrs:
+        path: "DOCs/Artifacts/ADRs"
+        purpose: "Architecture Decision Records (ADR-xxx.md)."
+      bugs:
+        path: "DOCs/Artifacts/BUGs"
+        purpose: "Bug reports, post-mortems, and issue tracking notes."
+      plans:
+        path: "DOCs/Artifacts/PLans"
+        purpose: "Implementation plans, task roadmaps, and execution specs."
+    guides:
+      path: "DOCs/GUIDs"
+      purpose: "User guides, API reference docs, and setup instructions."
     notes:
       root: "DOCs/NOTEs"
-      goal1: "DOCs/NOTEs/GOAL-1"
-      goal1_researches: "DOCs/NOTEs/GOAL-1/researches"
-      goal2: "DOCs/NOTEs/GOAL-2"
-      goal3: "DOCs/NOTEs/GOAL-3"
-  notebooks: "Notebooks"
+      goal_1:
+        path: "DOCs/NOTEs/GOAL-1"
+        researches: "DOCs/NOTEs/GOAL-1/researches"
+        outcome: "DOCs/NOTEs/GOAL-1/outcome.md"
+        purpose: "Notes, benchmarks, and research outcomes for GOAL-1."
+      goal_2:
+        path: "DOCs/NOTEs/GOAL-2"
+        purpose: "Notes, benchmarks, and research outcomes for GOAL-2."
+      goal_3:
+        path: "DOCs/NOTEs/GOAL-3"
+        purpose: "Notes, benchmarks, and research outcomes for GOAL-3."
+
+  notebooks:
+    path: "Notebooks"
+    purpose: "Jupyter / Marimo notebooks for exploratory analysis and visualization."
+
   shared:
     root: "Shared"
-    inps: "Shared/INPs"
-    outs: "Shared/OUTs"
-    data: "Shared/Data"
-    config: "Shared/cnf.yaml"
-  tests: "Tests"
-  utils: "Utils"
+    inputs:
+      path: "Shared/INPs"
+      purpose: "Raw input datasets, market data CSVs/Parquet, and external reference files."
+    outputs:
+      path: "Shared/OUTs"
+      purpose: "Generated reports, exported charts, processed metrics, and trained models."
+    data:
+      path: "Shared/Data"
+      purpose: "Shared static data fixtures and reference tables."
+    config:
+      path: "Shared/cnf.yaml"
+      purpose: "Central project paths and environment configuration."
+
+  tests:
+    path: "Tests"
+    purpose: "Unit, integration, and backtest test suites."
+
+  utils:
+    path: "Utils"
+    purpose: "Helper utilities, common math/date functions, and data transformations."
+
+# Quick File Routing Table (AI & Developer Placement Reference)
+file_routing:
+  - pattern: "ADR-*.md"
+    destination: "paths.docs.artifacts.adrs"
+  - pattern: "BUG-*.md"
+    destination: "paths.docs.artifacts.bugs"
+  - pattern: "PLAN-*.md"
+    destination: "paths.docs.artifacts.plans"
+  - pattern: "*_research.md"
+    destination: "paths.docs.notes.goal_1.researches"
+  - pattern: "*.csv, *.parquet, *.json (inputs)"
+    destination: "paths.shared.inputs"
+  - pattern: "*.png, *.svg, exported results"
+    destination: "paths.shared.outputs"
+  - pattern: "test_*.py"
+    destination: "paths.tests"
+  - pattern: "*.ipynb"
+    destination: "paths.notebooks"
