@@ -6,10 +6,14 @@ and renders an 8-subplot canvas (arranged as 3 + 3 + 2 charts) highlighting the 
 candles in Bright Blue, with Signal/Entry vertical lines and SL/TP price levels.
 
 Usage:
+    uv run python Notebooks/show_chart.py --show 41 42 36 24 26
+    uv run python Notebooks/show_chart.py --show 41,42,36,24,26
     uv run python Notebooks/show_chart.py 1 jan_2025
 """
 
+import argparse
 from pathlib import Path
+import re
 import sys
 
 import duckdb
@@ -27,7 +31,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "Shared" / "Data" / "eur_usd_trades_5m.duckdb"
 CATALOG_DB = BASE_DIR / "Shared" / "Data" / "memory.duckdb"
 OUT_DIR = BASE_DIR / "Shared" / "OUTs" / "png"
-OUT_FILE = OUT_DIR / "trade_1_chart.png"
 
 
 def load_catalog_metadata():
@@ -131,7 +134,6 @@ def detect_patterns_for_trade(
     catalog_meta = load_catalog_metadata()
     fired_patterns = []
 
-    # Search candlestick patterns specifically
     candlestick_patterns = [
         name for name in getattr(tap, "PATTERNS", set())
     ]
@@ -175,10 +177,8 @@ def detect_patterns_for_trade(
                 }
             )
 
-    # Sort and cap to max_patterns (8)
     fired_patterns.sort(key=lambda x: x["hit_idx"])
     if len(fired_patterns) > max_patterns:
-        # Pick evenly spaced or most significant 8 patterns
         step = len(fired_patterns) / max_patterns
         fired_patterns = [
             fired_patterns[int(i * step)] for i in range(max_patterns)
@@ -187,29 +187,30 @@ def detect_patterns_for_trade(
     return fired_patterns
 
 
-def load_trade_and_ohlcv(trade_id: int = 1, month_table: str = "jan_2025"):
+def load_trade_and_ohlcv(trade_id: int = 1, month_table: str = None):
     """Load Trade details and full OHLCV dataset."""
     if not DB_PATH.exists():
         raise FileNotFoundError(f"Database not found at: {DB_PATH}")
 
     conn = duckdb.connect(str(DB_PATH), read_only=True)
 
-    trade_df = conn.execute(
-        """
-        SELECT month_table, trade_id, entry_time, entry_price, sl_price, tp_price, exit_price, exit_reason, pnl, duration_candel, duration_mins
-        FROM trades
-        WHERE trade_id = ? AND month_table = ?
-        LIMIT 1;
-    """,
-        (trade_id, month_table),
-    ).fetchdf()
-
-    if trade_df.empty:
+    if month_table:
+        trade_df = conn.execute(
+            """
+            SELECT month_table, trade_id, entry_time, entry_price, sl_price, tp_price, exit_price, exit_reason, pnl, duration_candel, duration_mins
+            FROM trades
+            WHERE trade_id = ? AND month_table = ?
+            LIMIT 1;
+        """,
+            (trade_id, month_table),
+        ).fetchdf()
+    else:
         trade_df = conn.execute(
             """
             SELECT month_table, trade_id, entry_time, entry_price, sl_price, tp_price, exit_price, exit_reason, pnl, duration_candel, duration_mins
             FROM trades
             WHERE trade_id = ?
+            ORDER BY entry_time ASC
             LIMIT 1;
         """,
             (trade_id,),
@@ -347,7 +348,6 @@ def draw_subsegment(
     if tp_price is not None:
         ax.axhline(y=tp_price, color="#2e7d32", linestyle="--", linewidth=1.5, zorder=4)
 
-    # Subplot Title
     hit_ts_str = timestamps[entry_sub_idx] if 0 <= entry_sub_idx < n else ""
     ax.set_title(
         f"`{p_name}` [{c_count}c Blue]\nEntry: {hit_ts_str}",
@@ -368,12 +368,11 @@ def render_trade_canvas(
 ):
     """Render 8-chart canvas arranged as 3 + 3 + 2 grid."""
     n_patterns = len(fired_patterns)
-    print(f"[+] Rendering {n_patterns} pattern subplots in 3+3+2 canvas layout...")
+    print(f"[+] Rendering {n_patterns} pattern subplots in 3+3+2 canvas layout for Trade #{int(trade['trade_id'])}...")
 
     sns.set_theme(style="white")
     fig = plt.figure(figsize=(16, 11))
 
-    # Define 3 + 3 + 2 GridSpec (3 rows: Row 1 = 3 cols, Row 2 = 3 cols, Row 3 = 2 cols centered)
     gs = fig.add_gridspec(3, 6, hspace=0.45, wspace=0.35)
 
     axes = []
@@ -393,7 +392,7 @@ def render_trade_canvas(
 
     prior_bars = 15
     post_bars = 10
-    duration_bars = int(trade["duration_candel"]) if trade["duration_candel"] and not pd.isna(trade["duration_candel"]) else 3
+    duration_bars = int(trade["duration_candel"]) if trade["duration_candel"] and not pd.isna(trade["duration_candel"]) else 1
 
     for idx in range(min(8, n_patterns)):
         p_info = fired_patterns[idx]
@@ -407,7 +406,6 @@ def render_trade_canvas(
         sub_df = ohlcv_df.iloc[start_idx:end_idx].copy()
         entry_sub_idx = entry_idx - start_idx
 
-        # Calculate pattern candle indices in subsegment
         hit_sub_idx = hit_idx - start_idx
         pattern_indices = set(
             range(max(0, hit_sub_idx - (c_count - 1)), hit_sub_idx + 1)
@@ -423,7 +421,6 @@ def render_trade_canvas(
             trade,
         )
 
-    # Hide unused subplots if fewer than 8 patterns
     for j in range(n_patterns, 8):
         axes[j].axis("off")
 
@@ -442,25 +439,64 @@ def render_trade_canvas(
     print(f"[+] Output 3+3+2 trade pattern canvas saved to: {output_path.resolve()}")
 
 
+def parse_trade_ids(show_args):
+    """Parse trade IDs from list, string, or comma-separated inputs."""
+    trade_ids = []
+    for arg in show_args:
+        # Split by comma or whitespace if formatted as "41,42,36" or "{41, 36}"
+        cleaned = re.sub(r"[\{\}\[\]]", "", str(arg))
+        parts = re.split(r"[,,\s]+", cleaned)
+        for p in parts:
+            if p.strip().isdigit():
+                trade_ids.append(int(p.strip()))
+    return trade_ids
+
+
 def main():
-    trade_id = 1
-    month_table = "jan_2025"
-    if len(sys.argv) > 1:
+    parser = argparse.ArgumentParser(
+        description="Render 8-chart (3+3+2 grid) pattern canvas for target trade IDs."
+    )
+    parser.add_argument(
+        "--show",
+        nargs="+",
+        help="Trade IDs to render (e.g. --show 41 42 36 24 26 or --show 41,42,36,24,26)",
+    )
+    parser.add_argument(
+        "positional_args",
+        nargs="*",
+        help="Positional trade_id and optional month_table (e.g. 1 jan_2025)",
+    )
+
+    args = parser.parse_args()
+
+    trade_ids = []
+    month_table = None
+
+    if args.show:
+        trade_ids = parse_trade_ids(args.show)
+    elif args.positional_args:
+        if args.positional_args[0].isdigit():
+            trade_ids = [int(args.positional_args[0])]
+        if len(args.positional_args) > 1:
+            month_table = args.positional_args[1]
+
+    if not trade_ids:
+        trade_ids = [1]  # Default
+
+    print(f"[+] Processing {len(trade_ids)} trade canvas rendering job(s): Trade IDs {trade_ids}")
+
+    for tid in trade_ids:
         try:
-            trade_id = int(sys.argv[1])
-        except ValueError:
-            pass
-    if len(sys.argv) > 2:
-        month_table = sys.argv[2]
+            print(f"\n[+] Loading Trade #{tid} from eur_usd_trades_5m.duckdb...")
+            trade, ohlcv_df, entry_idx = load_trade_and_ohlcv(tid, month_table)
 
-    print(f"[+] Loading Trade #{trade_id} ({month_table}) from eur_usd_trades_5m.duckdb...")
-    trade, ohlcv_df, entry_idx = load_trade_and_ohlcv(trade_id, month_table)
+            print(f"[+] Detecting patterns in 15-candle lookback prior to Trade #{tid} entry...")
+            fired_patterns = detect_patterns_for_trade(ohlcv_df, entry_idx, lookback_bars=15, max_patterns=8)
 
-    print(f"[+] Detecting patterns in 15-candle lookback prior to Trade #{trade_id} entry...")
-    fired_patterns = detect_patterns_for_trade(ohlcv_df, entry_idx, lookback_bars=15, max_patterns=8)
-
-    out_file = OUT_DIR / f"trade_{trade_id}_chart.png"
-    render_trade_canvas(trade, ohlcv_df, entry_idx, fired_patterns, out_file)
+            out_file = OUT_DIR / f"trade_{tid}_chart.png"
+            render_trade_canvas(trade, ohlcv_df, entry_idx, fired_patterns, out_file)
+        except Exception as exc:
+            print(f"[-] Error processing Trade #{tid}: {exc}")
 
 
 if __name__ == "__main__":
