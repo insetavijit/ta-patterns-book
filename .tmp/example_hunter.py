@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
-"""Example Hunter CLI script centered on the target pattern candle (10 prior bars + Target + 10 future bars).
+"""Example Hunter CLI script with multi-page support for Chart Patterns and Candlesticks.
 
-Features:
-- Centered layout: 10 context bars before, Target Pattern Candle in Blue (middle), 10 future bars after.
-- Solid 100% opaque candle bodies (no internal wick leakage).
-- Single-pattern mode: Displays 12 real market examples of 1 specified pattern.
-- Multi-pattern mode: Displays 1 real market example for up to 12 DIFFERENT patterns in a single canvas.
-
-Usage:
-    python Utils/example_hunter.py --pattern hammer
-    python Utils/example_hunter.py --multi --family 1-candle
+Supports:
+- Category filtering ('candlestick', 'chart_pattern')
+- Direction filtering ('BULLISH', 'BEARISH', 'BEARISH_NEUTRAL')
+- Automatic pagination into subdirectories (e.g. Shared/OUTs/png/chart-patterns-bullish/page_N.png)
+- 20 charts per page (4 rows x 5 cols)
 """
 
 import argparse
@@ -23,13 +19,38 @@ matplotlib.use("Agg")  # Headless rendering
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import ta_patterns as tap
 import ta_patterns.chart_patterns as cp
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DB = BASE_DIR / "Shared" / "OUTs" / "ohlcv_5m.duckdb"
-DEFAULT_OUT_DIR = BASE_DIR / "Shared" / "OUTs"
+DEFAULT_OUT_DIR = BASE_DIR / "Shared" / "OUTs" / "png"
 CATALOG_DB = BASE_DIR / "Shared" / "Data" / "memory.duckdb"
+
+
+def get_pattern_candle_count(pattern_name: str, family: str = None) -> int:
+    """Determine how many candles belong to the pattern."""
+    if family == "1-candle":
+        return 1
+    elif family == "2-candle":
+        return 2
+    elif family == "3-candle":
+        return 3
+    elif family == "4+ candle":
+        if pattern_name in [
+            "rising_three_methods",
+            "falling_three_methods",
+            "mat_hold",
+            "breakaway_bullish",
+            "breakaway_bearish",
+            "ladder_bottom",
+        ]:
+            return 5
+        return 4
+
+    # Default for chart patterns: highlight the last 5 key formation bars
+    return 5
 
 
 def find_pattern_function(pattern_name: str):
@@ -48,7 +69,7 @@ def run_detector(fn, category, o, h, l, c, v):
         fn.__code__.co_varnames[:5] if hasattr(fn, "__code__") else ()
     )
 
-    if category == "chart_pattern" and "v" in varnames:
+    if category == "chart_pattern" and "v" in varnames and v is not None:
         try:
             return fn(o, h, l, c, v=v)
         except Exception:
@@ -92,20 +113,20 @@ def load_ohlcv_data(db_path: Path):
 
 
 def draw_candlestick_subsegment(
-    ax, opens, highs, lows, closes, timestamps, target_idx, title
+    ax, opens, highs, lows, closes, timestamps, target_indices, title
 ):
-    """Draw centered candlestick plot: 10 prior bars + Target Blue Candle + 10 future bars."""
+    """Draw candlestick subsegment highlighting pattern formation bars in Blue."""
     n = len(closes)
     x = np.arange(n)
 
     ax.grid(False)
 
     for i in range(n):
-        is_target = i == target_idx
+        is_target = i in target_indices
         is_bullish = closes[i] >= opens[i]
 
         if is_target:
-            color = "#1e88e5"  # Solid Bright Blue target candle body
+            color = "#1e88e5"  # Solid Bright Blue pattern candle body
             edge_color = "#1565c0"
             lw = 1.8
         else:
@@ -121,7 +142,7 @@ def draw_candlestick_subsegment(
         body_top = max(opens[i], closes[i])
         body_height = max(abs(closes[i] - opens[i]), 0.00005)
 
-        # 1. Top & bottom wicks
+        # Top & bottom wicks
         ax.plot(
             [x[i], x[i]],
             [body_top, highs[i]],
@@ -137,7 +158,7 @@ def draw_candlestick_subsegment(
             zorder=2,
         )
 
-        # 2. 100% opaque candle body (zorder=3)
+        # 100% opaque candle body
         ax.bar(
             x[i],
             body_height,
@@ -150,97 +171,89 @@ def draw_candlestick_subsegment(
             zorder=3,
         )
 
-    ax.set_title(title, fontsize=9, fontweight="bold", color="#1a237e")
-    ax.tick_params(axis="both", which="both", labelsize=7)
+    ax.set_title(title, fontsize=8, fontweight="bold", color="#1a237e")
+    ax.tick_params(axis="both", which="both", labelsize=6)
     ax.set_xlim(-0.8, n - 0.2)
 
     for spine in ["top", "right"]:
         ax.spines[spine].set_visible(False)
 
 
-def fetch_patterns_by_family(family: str, direction: str = "BULLISH"):
+def fetch_patterns_from_catalog(category: str = "chart_pattern", direction: str = "BULLISH"):
     """Fetch pattern names from memory.duckdb pattern_catalog."""
     if not CATALOG_DB.exists():
         return []
     conn = duckdb.connect(str(CATALOG_DB))
-    rows = conn.execute(
-        """
-        SELECT pattern_name 
-        FROM pattern_catalog 
-        WHERE family = ? AND direction_class = ?
-        ORDER BY pattern_name;
-    """,
-        (family, direction),
-    ).fetchall()
+    if direction == "BEARISH_NEUTRAL":
+        rows = conn.execute(
+            """
+            SELECT pattern_name 
+            FROM pattern_catalog 
+            WHERE category = ? 
+              AND direction_class IN ('BEARISH', 'NON_DIRECTIONAL')
+            ORDER BY pattern_name;
+        """,
+            (category,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT pattern_name 
+            FROM pattern_catalog 
+            WHERE category = ? 
+              AND direction_class = ?
+            ORDER BY pattern_name;
+        """,
+            (category, direction),
+        ).fetchall()
     conn.close()
     return [r[0] for r in rows]
 
 
-def hunt_single_pattern(
-    pattern_name: str,
+def render_paged_canvas(
+    pattern_items: list,
+    page_num: int,
+    total_pages: int,
+    category_title: str,
     df,
     o,
     h,
     l,
     c,
-    v,
-    max_examples: int,
     prior_bars: int,
     post_bars: int,
     output_path: Path,
 ):
-    """Scan and plot 12 centered examples of ONE single pattern."""
-    fn, category = find_pattern_function(pattern_name)
-    if fn is None:
-        print(f"[-] Pattern '{pattern_name}' not found in library.")
-        return
+    """Render one 4x5 canvas page containing up to 20 chart pattern examples."""
+    n_plots = len(pattern_items)
+    cols = 5
+    rows = 4
 
-    signals = run_detector(fn, category, o, h, l, c, v)
-    hit_indices = np.where(signals != 0)[0]
-    total_len = len(df)
-    valid_hits = [
-        idx for idx in hit_indices if idx >= prior_bars and idx + post_bars < total_len
-    ]
-    total_found = len(valid_hits)
+    sns.set_theme(style="white")
+    fig, axes = plt.subplots(rows, cols, figsize=(18, 12))
+    axes = np.array(axes).flatten()
 
-    print(
-        f"[+] Found {total_found:,} occurrences of pattern '{pattern_name}'!"
-    )
-    if total_found == 0:
-        return
+    for idx, item in enumerate(pattern_items):
+        p_name = item["pattern_name"]
+        hit_idx = item["hit_idx"]
+        c_count = item["candle_count"]
 
-    if total_found <= max_examples:
-        selected_hits = valid_hits
-    else:
-        step = total_found / max_examples
-        selected_hits = [
-            valid_hits[int(i * step)] for i in range(max_examples)
-        ]
-
-    n_plots = len(selected_hits)
-    cols = 4 if n_plots >= 4 else n_plots
-    rows = int(np.ceil(n_plots / cols))
-
-    fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 3 * rows))
-    axes = np.array(axes).flatten() if n_plots > 1 else [axes]
-
-    for idx, hit_idx in enumerate(selected_hits):
-        start_idx = hit_idx - prior_bars
-        end_idx = hit_idx + post_bars + 1
+        start_idx = max(0, hit_idx - prior_bars - (c_count - 1))
+        end_idx = min(len(df), hit_idx + post_bars + 1)
 
         sub_o = o[start_idx:end_idx]
         sub_h = h[start_idx:end_idx]
         sub_l = l[start_idx:end_idx]
         sub_c = c[start_idx:end_idx]
         sub_ts = df["timestamp"].iloc[start_idx:end_idx].values
+        target_ts_str = df["timestamp"].iloc[hit_idx].strftime("%Y-%m-%d %H:%M")
 
-        target_ts_str = (
-            df["timestamp"].iloc[hit_idx].strftime("%Y-%m-%d %H:%M")
+        target_center_idx = hit_idx - start_idx
+        target_indices = set(
+            range(max(0, target_center_idx - (c_count - 1)), target_center_idx + 1)
         )
-        sig_val = signals[hit_idx]
-        dir_str = "Bullish (+1)" if sig_val > 0 else "Bearish (-1)"
 
-        title = f"#{idx+1} {target_ts_str}\nClose: {c[hit_idx]:.5f} [{dir_str}]"
+        title = f"{idx+1}. {p_name}\n{target_ts_str} | Close: {c[hit_idx]:.5f}"
         draw_candlestick_subsegment(
             axes[idx],
             sub_o,
@@ -248,7 +261,7 @@ def hunt_single_pattern(
             sub_l,
             sub_c,
             sub_ts,
-            target_idx=prior_bars,
+            target_indices=target_indices,
             title=title,
         )
 
@@ -256,47 +269,54 @@ def hunt_single_pattern(
         axes[j].axis("off")
 
     plt.suptitle(
-        f"Pattern Hunter — Centered '{pattern_name}' in Real EUR/USD Data ({total_found:,} occurrences)",
+        f"{category_title} — Page {page_num} of {total_pages} ({n_plots} Patterns, Real EUR/USD 5m)",
         fontsize=14,
         fontweight="bold",
         y=0.99,
     )
     plt.tight_layout(rect=[0, 0, 1, 0.96])
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"[+] Output canvas saved to: {output_path.resolve()}")
+    print(f"[+] Saved canvas page to: {output_path.resolve()}")
 
 
-def hunt_multi_patterns(
+def hunt_all_paged_patterns(
     pattern_list: list,
+    category_title: str,
+    output_dir: Path,
+    file_prefix: str,
     df,
     o,
     h,
     l,
     c,
     v,
-    prior_bars: int,
-    post_bars: int,
-    output_path: Path,
+    prior_bars: int = 20,
+    post_bars: int = 5,
+    page_size: int = 20,
 ):
-    """Scan and plot 1 centered real example for EACH of up to 12 DIFFERENT patterns."""
+    """Scan real data for all patterns and output chunked 20-chart pages."""
     found_examples = []
     total_len = len(df)
 
+    print(f"[+] Scanning market data for {len(pattern_list)} patterns...")
+
     for p_name in pattern_list:
-        if len(found_examples) >= 12:
-            break
         fn, category = find_pattern_function(p_name)
         if fn is None:
             continue
 
+        c_count = get_pattern_candle_count(p_name)
         signals = run_detector(fn, category, o, h, l, c, v)
         if signals is None:
             continue
 
         hit_indices = np.where(signals != 0)[0]
         valid_hits = [
-            idx for idx in hit_indices if idx >= prior_bars and idx + post_bars < total_len
+            idx
+            for idx in hit_indices
+            if idx >= (prior_bars + c_count - 1) and idx + post_bars < total_len
         ]
 
         if valid_hits:
@@ -306,96 +326,59 @@ def hunt_multi_patterns(
                     "pattern_name": p_name,
                     "hit_idx": hit_idx,
                     "signal": signals[hit_idx],
+                    "candle_count": c_count,
                 }
             )
 
+    total_found = len(found_examples)
     print(
-        f"[+] Found real market occurrences for {len(found_examples)} distinct patterns!"
+        f"[+] Found real market occurrences for {total_found} of {len(pattern_list)} patterns!"
     )
+
     if not found_examples:
-        print("[-] No occurrences found for the specified pattern list.")
+        print("[-] No occurrences found.")
         return
 
-    n_plots = len(found_examples)
-    cols = 4 if n_plots >= 4 else n_plots
-    rows = int(np.ceil(n_plots / cols))
+    total_pages = int(np.ceil(total_found / page_size))
 
-    fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 3 * rows))
-    axes = np.array(axes).flatten() if n_plots > 1 else [axes]
+    for p_idx in range(total_pages):
+        start_idx = p_idx * page_size
+        end_idx = min(total_found, (p_idx + 1) * page_size)
+        page_items = found_examples[start_idx:end_idx]
 
-    for idx, item in enumerate(found_examples):
-        p_name = item["pattern_name"]
-        hit_idx = item["hit_idx"]
-
-        start_idx = hit_idx - prior_bars
-        end_idx = hit_idx + post_bars + 1
-
-        sub_o = o[start_idx:end_idx]
-        sub_h = h[start_idx:end_idx]
-        sub_l = l[start_idx:end_idx]
-        sub_c = c[start_idx:end_idx]
-        sub_ts = df["timestamp"].iloc[start_idx:end_idx].values
-        target_ts_str = (
-            df["timestamp"].iloc[hit_idx].strftime("%Y-%m-%d %H:%M")
+        out_path = output_dir / f"{file_prefix}_page_{p_idx+1}.png"
+        render_paged_canvas(
+            page_items,
+            p_idx + 1,
+            total_pages,
+            category_title,
+            df,
+            o,
+            h,
+            l,
+            c,
+            prior_bars,
+            post_bars,
+            out_path,
         )
-
-        title = f"{idx+1}. {p_name}\n{target_ts_str} | {c[hit_idx]:.5f}"
-        draw_candlestick_subsegment(
-            axes[idx],
-            sub_o,
-            sub_h,
-            sub_l,
-            sub_c,
-            sub_ts,
-            target_idx=prior_bars,
-            title=title,
-        )
-
-    for j in range(n_plots, len(axes)):
-        axes[j].axis("off")
-
-    plt.suptitle(
-        f"Pattern Hunter — 12 Centered Patterns (10 prior bars | Target Blue | 10 future bars)",
-        fontsize=14,
-        fontweight="bold",
-        y=0.99,
-    )
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(
-        f"[+] Output multi-pattern canvas saved to: {output_path.resolve()}"
-    )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Hunt and plot real technical analysis patterns centered in a 10-Target-10 bar window."
+        description="Hunt and plot real technical analysis patterns with 20 charts per page."
     )
     parser.add_argument(
-        "-p",
-        "--pattern",
+        "--category",
         type=str,
-        default=None,
-        help="Single pattern name to hunt 12 examples (e.g. hammer, engulfing_bullish)",
+        default="chart_pattern",
+        choices=["candlestick", "chart_pattern"],
+        help="Category: candlestick or chart_pattern (default: chart_pattern)",
     )
     parser.add_argument(
-        "--patterns",
-        nargs="+",
-        default=None,
-        help="List of multiple distinct pattern names to hunt",
-    )
-    parser.add_argument(
-        "--multi",
-        action="store_true",
-        help="Enable multi-pattern mode (1 occurrence for 12 different patterns)",
-    )
-    parser.add_argument(
-        "-f",
-        "--family",
+        "--direction",
         type=str,
-        default="1-candle",
-        help="Family tag to auto-select 12 patterns in multi mode (default: 1-candle)",
+        default="BULLISH",
+        help="Direction filter: BULLISH, BEARISH, or BEARISH_NEUTRAL (default: BULLISH)",
     )
     parser.add_argument(
         "-d",
@@ -405,30 +388,28 @@ def main():
         help="Path to DuckDB database (default: Shared/OUTs/ohlcv_5m.duckdb)",
     )
     parser.add_argument(
-        "-n",
-        "--max-examples",
+        "--out-dir",
+        type=str,
+        default=None,
+        help="Target output subdirectory",
+    )
+    parser.add_argument(
+        "--page-size",
         type=int,
-        default=12,
-        help="Maximum examples (default: 12)",
+        default=20,
+        help="Number of charts per canvas page (default: 20)",
     )
     parser.add_argument(
         "--prior-bars",
         type=int,
-        default=10,
-        help="Context bars before target pattern bar (default: 10)",
+        default=20,
+        help="Context bars before pattern (default: 20)",
     )
     parser.add_argument(
         "--post-bars",
         type=int,
-        default=10,
-        help="Outcome bars after target pattern bar (default: 10)",
-    )
-    parser.add_argument(
-        "-o",
-        "--out",
-        type=str,
-        default=None,
-        help="Output image path",
+        default=5,
+        help="Outcome bars after pattern (default: 5)",
     )
 
     args = parser.parse_args()
@@ -443,52 +424,32 @@ def main():
     c = df["close"].to_numpy()
     v = df["volume"].to_numpy() if "volume" in df.columns else None
 
-    # Multi-pattern mode trigger
-    if args.multi or args.patterns:
-        if args.patterns:
-            pattern_list = args.patterns
-        else:
-            pattern_list = fetch_patterns_by_family(args.family)
-
-        out_file = (
-            Path(args.out)
-            if args.out
-            else DEFAULT_OUT_DIR
-            / f"pattern_hunter_centered_{args.family.replace('+', 'plus')}.png"
-        )
-        hunt_multi_patterns(
-            pattern_list,
-            df,
-            o,
-            h,
-            l,
-            c,
-            v,
-            args.prior_bars,
-            args.post_bars,
-            out_file,
-        )
-
+    # Determine subdirectory and title
+    if args.out_dir:
+        out_dir = Path(args.out_dir)
     else:
-        pattern_name = args.pattern if args.pattern else "hammer"
-        out_file = (
-            Path(args.out)
-            if args.out
-            else DEFAULT_OUT_DIR / f"pattern_hunter_centered_{pattern_name}.png"
-        )
-        hunt_single_pattern(
-            pattern_name,
-            df,
-            o,
-            h,
-            l,
-            c,
-            v,
-            args.max_examples,
-            args.prior_bars,
-            args.post_bars,
-            out_file,
-        )
+        folder_name = f"{args.category.replace('_', '-')}-{args.direction.lower()}"
+        out_dir = DEFAULT_OUT_DIR / folder_name
+
+    pattern_list = fetch_patterns_from_catalog(args.category, args.direction)
+    category_title = f"{args.category.replace('_', ' ').title()} ({args.direction})"
+    file_prefix = f"{args.direction.lower()}_{args.category}"
+
+    hunt_all_paged_patterns(
+        pattern_list,
+        category_title,
+        out_dir,
+        file_prefix,
+        df,
+        o,
+        h,
+        l,
+        c,
+        v,
+        args.prior_bars,
+        args.post_bars,
+        args.page_size,
+    )
 
 
 if __name__ == "__main__":
