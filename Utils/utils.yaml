@@ -1,0 +1,100 @@
+# Utils Directory Tooling & Executable Specifications
+
+tools:
+  duckdb_explorer:
+    name: "DuckDB Explorer CLI"
+    path: "Utils/duckdb_explorer.py"
+    purpose: "Agent-friendly, read-only-by-default CLI tool for inspecting, querying, searching, and analyzing DuckDB databases."
+    default_execution: "uv run python Utils/duckdb_explorer.py"
+    output_formats: ["json", "ndjson", "table", "markdown"]
+    recommended_output_format: "json"
+
+    # Tool Overview & Core Capabilities
+    capabilities:
+      - name: "Database Health & Statistics"
+        description: "Verify DB file validity, list schemas, tables, index constraints, and total row counts."
+      - name: "Schema & Structural Inspection"
+        description: "Inspect column data types, nullabilities, default values, or generate a complete schema map of all tables."
+      - name: "Interactive Querying & Profiling"
+        description: "Execute SQL queries, preview sample data, generate column statistics (SUMMARIZE), or profile a table in a single call."
+      - name: "Deep Data & Schema Search"
+        description: "Find tables/columns by keyword or search for specific values across database contents."
+      - name: "Schema Diffing & Exporting"
+        description: "Diff schemas across database files or export query results to CSV, JSON, NDJSON, or Parquet."
+
+    # Global CLI Options
+    global_flags:
+      - flag: "--output"
+        type: "string"
+        choices: ["json", "ndjson", "table", "markdown"]
+        default: "json"
+        description: "Output format. Use 'json' for agent consumption or 'table'/'markdown' for human preview."
+      - flag: "--limit"
+        type: "integer"
+        default: 1000
+        description: "Maximum row count cap returned by queries or sample commands."
+      - flag: "--write"
+        type: "boolean"
+        default: false
+        description: "Enable write operations (INSERT/CREATE/DROP). Off by default for safety."
+      - flag: "--timeout"
+        type: "integer"
+        default: null
+        description: "Query execution timeout limit in seconds."
+      - flag: "--pretty"
+        type: "boolean"
+        default: false
+        description: "Pretty-print JSON outputs."
+
+    # Subcommand Catalog
+    subcommands:
+      - name: "list-tables"
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> list-tables"
+        description: "Lists all tables and views with their respective row counts."
+        example: "uv run python Utils/duckdb_explorer.py Shared/OUTs/ohlcv_5m.duckdb list-tables"
+
+      - name: "schema"
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> schema <table>"
+        description: "Displays column schema, data types, and nullability for a specific table."
+        example: "uv run python Utils/duckdb_explorer.py Shared/OUTs/ohlcv_5m.duckdb schema ohlcv_5m"
+
+      - name: "schema-all"
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> schema-all"
+        description: "Outputs column schemas for every table in the database in a single call."
+        example: "uv run python Utils/duckdb_explorer.py Shared/Data/memory.duckdb schema-all"
+
+      - name: "profile"
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> profile <table>"
+        description: "Combines schema inspection, DuckDB native column statistics (SUMMARIZE), and sample rows into a single profile."
+        example: "uv run python Utils/duckdb_explorer.py Shared/Data/memory.duckdb profile pattern_catalog"
+
+      - name: "sample"
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> sample <table> [--limit N]"
+        description: "Previews N sample rows from a target table."
+        example: "uv run python Utils/duckdb_explorer.py Shared/OUTs/ohlcv_5m.duckdb sample ohlcv_5m --limit 5"
+
+      - name: "query"
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> query \"<sql_statement>\""
+        description: "Executes arbitrary SQL queries against the database (read-only unless --write is passed)."
+        example: "uv run python Utils/duckdb_explorer.py Shared/Data/memory.duckdb query \"SELECT * FROM pattern_catalog WHERE family = '1-candle'\""
+
+      - name: "search-columns"
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> search-columns <keyword>"
+        description: "Finds all tables and column names matching a keyword."
+        example: "uv run python Utils/duckdb_explorer.py Shared/Data/memory.duckdb search-columns pattern"
+
+      - name: "health-check"
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> health-check"
+        description: "Verifies the target file is a valid, uncorrupted, queryable DuckDB database."
+        example: "uv run python Utils/duckdb_explorer.py Shared/OUTs/ohlcv_5m.duckdb health-check"
+
+      - name: "export"
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> export <table> <out_file>"
+        description: "Exports a table or query result to CSV, JSON, NDJSON, or Parquet."
+        example: "uv run python Utils/duckdb_explorer.py Shared/Data/memory.duckdb export pattern_catalog catalog.csv"
+
+    # Agent Operational Guidance
+    agent_guidelines:
+      - "Default to read-only mode (do not pass --write unless explicitly modifying data)."
+      - "Use 'list-tables' and 'schema' first to inspect database contents before writing complex SQL."
+      - "For quick comprehensive understanding of a table, use the 'profile' subcommand."
