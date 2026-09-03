@@ -31,6 +31,7 @@ ta-patterns-book/
 │   ├── Data/                     # Shared static data fixtures & memory.duckdb
 │   ├── INPs/                     # Raw input datasets (CSVs, Parquets, JSONs)
 │   ├── OUTs/                     # Generated output datasets, plots & exported models
+│   │   └── png/                  # Rendered PNG chart canvases & image plots
 │   └── cnf.yaml                  # Project configuration file
 ├── Tests/                        # Unit, integration & regression test suites
 ├── Utils/                        # Registered CLI tools & helper utilities
@@ -58,7 +59,7 @@ When creating or saving files, locate the appropriate directory using the table 
 | **User & Setup Guides** | `DOCs/GUIDs/` | `setup-guide.md` |
 | **Agent Operational Docs** | `DOCs/agents/` | `dir-tree.md` |
 | **Raw Input Datasets** | `Shared/INPs/` | `btc_1h_2023.csv` |
-| **Generated Charts & Results** | `Shared/OUTs/` | `head_and_shoulders_plot.png` |
+| **Generated PNG Charts** | `Shared/OUTs/png/` | `head_and_shoulders_plot.png` |
 | **Static Reference Data & Memory** | `Shared/Data/` | `memory.duckdb` |
 | **Jupyter / Marimo Notebooks** | `Notebooks/` | `01_candlestick_exploration.ipynb` |
 | **Unit & Integration Tests** | `Tests/` | `test_head_and_shoulders.py` |

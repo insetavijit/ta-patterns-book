@@ -60,8 +60,9 @@ paths:
       path: "Shared/INPs"
       purpose: "Raw input datasets, market data CSVs/Parquet, and external reference files."
     outputs:
-      path: "Shared/OUTs"
-      purpose: "Generated reports, exported charts, processed metrics, and trained models."
+      root: "Shared/OUTs"
+      png: "Shared/OUTs/png"
+      purpose: "Generated reports, exported charts, PNG figures, processed metrics, and trained models."
     data:
       path: "Shared/Data"
       purpose: "Shared static data fixtures and reference tables."
@@ -95,8 +96,8 @@ file_routing:
     destination: "paths.docs.notes.goal_1.researches"
   - pattern: "*.csv, *.parquet, *.json (inputs)"
     destination: "paths.shared.inputs"
-  - pattern: "*.png, *.svg, exported results"
-    destination: "paths.shared.outputs"
+  - pattern: "*.png, *.jpg, *.svg (rendered charts)"
+    destination: "paths.shared.outputs.png"
   - pattern: "test_*.py"
     destination: "paths.tests"
   - pattern: "*.ipynb"
