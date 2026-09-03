@@ -1059,6 +1059,71 @@ def cmd_profile(conn, args) -> dict:
     return make_envelope("profile", True, data, None)
 
 
+def cmd_pandas(conn, args) -> dict:
+    """Execute a Pandas expression on a table or query result DataFrame."""
+    try:
+        import pandas as pd
+        import numpy as np
+    except ImportError:
+        raise ToolError("pandas/numpy packages are required for the pandas subcommand.", EXIT_FILE_ERROR)
+
+    if args.query:
+        sql = args.query
+    elif args.table:
+        schema = quote_ident(args.schema or "main")
+        tbl = quote_ident(args.table)
+        sql = f"SELECT * FROM {schema}.{tbl}"
+    else:
+        raise ToolError("Either <table> positional argument or --query must be provided.", EXIT_VALIDATION_ERROR)
+
+    try:
+        df = conn.execute(sql).fetchdf()
+    except duckdb.Error as exc:
+        raise ToolError(str(exc), EXIT_SQL_ERROR, {"sql": sql}) from exc
+
+    expr = args.expr
+    if not expr or not expr.strip():
+        expr = "df.head()"
+
+    try:
+        res = eval(expr, {"df": df, "pd": pd, "np": np, "pandas": pd, "numpy": np})
+    except Exception as exc:
+        raise ToolError(f"Error evaluating Pandas expression '{expr}': {exc}", EXIT_VALIDATION_ERROR) from exc
+
+    if isinstance(res, pd.DataFrame):
+        if args.limit and len(res) > args.limit:
+            res = res.head(args.limit)
+        records = res.to_dict(orient="records")
+        records = json.loads(json.dumps(records, default=str))
+        result_data = {
+            "expression": expr,
+            "result_type": "DataFrame",
+            "shape": list(res.shape),
+            "columns": list(res.columns),
+            "data": records,
+        }
+    elif isinstance(res, pd.Series):
+        if args.limit and len(res) > args.limit:
+            res = res.head(args.limit)
+        res_dict = res.to_dict()
+        res_dict = json.loads(json.dumps(res_dict, default=str))
+        result_data = {
+            "expression": expr,
+            "result_type": "Series",
+            "name": str(res.name) if res.name else "Series",
+            "length": len(res),
+            "data": res_dict,
+        }
+    else:
+        result_data = {
+            "expression": expr,
+            "result_type": type(res).__name__,
+            "value": json.loads(json.dumps(res, default=str)),
+        }
+
+    return make_envelope("pandas", True, result_data, None)
+
+
 def cmd_health_check(conn, args) -> dict:
     """Verify the file opens as a valid, queryable DuckDB database."""
     try:
@@ -1301,6 +1366,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_schema_flag(p)
     _add_estimate_flag(p)
     p.set_defaults(func=cmd_profile)
+
+    p = sub.add_parser("pandas", help="Execute Pandas operations/expressions on a table or query DataFrame.")
+    p.add_argument("table", nargs="?", help="Table to load into DataFrame (e.g. ohlcv_5m).")
+    p.add_argument("--expr", required=True, help="Pandas expression to evaluate on 'df' (e.g. \"df.groupby('status')['pnl'].sum()\")")
+    p.add_argument("--query", help="Custom SQL query to produce the input DataFrame instead of a table.")
+    _add_schema_flag(p)
+    p.set_defaults(func=cmd_pandas)
 
     p = sub.add_parser("health-check", help="Verify the file is a valid, queryable DuckDB database.")
     p.set_defaults(func=cmd_health_check)
