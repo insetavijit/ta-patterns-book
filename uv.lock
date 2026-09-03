@@ -611,6 +611,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "matplotlib" },
     { name = "mplfinance" },
+    { name = "pandas" },
     { name = "seaborn" },
     { name = "ta-patterns" },
 ]
@@ -620,6 +621,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.5.5" },
     { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "mplfinance", specifier = ">=0.12.10b0" },
+    { name = "pandas", specifier = ">=3.0.5" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "ta-patterns", specifier = ">=1.1.1" },
 ]
