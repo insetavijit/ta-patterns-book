@@ -17,8 +17,8 @@ tools:
         description: "Inspect column data types, nullabilities, default values, or generate a complete schema map of all tables."
       - name: "Interactive Querying & Profiling"
         description: "Execute SQL queries, preview sample data, generate column statistics (SUMMARIZE), or profile a table in a single call."
-      - name: "Pandas CLI Transformations"
-        description: "Execute arbitrary Pandas Python expressions (groupby, filter, agg, describe, resample) on any table or SQL query DataFrame."
+      - name: "Direct Pandas CLI Transformations"
+        description: "Execute arbitrary Pandas Python expressions directly on any table or SQL query DataFrame ('df')."
       - name: "Deep Data & Schema Search"
         description: "Find tables/columns by keyword or search for specific values across database contents."
       - name: "Schema Diffing & Exporting"
@@ -61,9 +61,9 @@ tools:
         example: "uv run python Utils/duckdb_explorer.py Shared/OUTs/ohlcv_5m.duckdb schema ohlcv_5m"
 
       - name: "pandas"
-        usage: "uv run python Utils/duckdb_explorer.py <db_path> pandas <table> --expr \"<pandas_expression>\""
-        description: "Executes arbitrary Pandas DataFrame expressions (evaluates 'df') on a target table or SQL query result."
-        example: "uv run python Utils/duckdb_explorer.py Shared/INPs/EURUSD_5m_2025_v2_trades_and_ohlcv.duckdb pandas trade_duration_5m --expr \"df.groupby('status')['pnl'].sum()\""
+        usage: "uv run python Utils/duckdb_explorer.py <db_path> pandas <table> \"<pandas_expression>\""
+        description: "Executes arbitrary Pandas DataFrame expressions (evaluates 'df') directly on a target table or SQL query result."
+        example: "uv run python Utils/duckdb_explorer.py Shared/INPs/EURUSD_5m_2025_v2_trades_and_ohlcv.duckdb pandas trade_duration_5m \"df.groupby('status')['pnl'].sum()\""
 
       - name: "schema-all"
         usage: "uv run python Utils/duckdb_explorer.py <db_path> schema-all"
@@ -104,4 +104,4 @@ tools:
     agent_guidelines:
       - "Default to read-only mode (do not pass --write unless explicitly modifying data)."
       - "Use 'list-tables' and 'schema' first to inspect database contents before writing complex SQL."
-      - "Use the 'pandas' subcommand with --expr to perform aggregations, groupbys, statistical summaries, or custom filters on DataFrames."
+      - "Use the 'pandas' subcommand with direct positional expression: `pandas <table> \"df.groupby(...)\"` for full Pandas capabilities."

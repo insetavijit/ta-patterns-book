@@ -1067,10 +1067,10 @@ def cmd_pandas(conn, args) -> dict:
     except ImportError:
         raise ToolError("pandas/numpy packages are required for the pandas subcommand.", EXIT_FILE_ERROR)
 
-    if args.query:
+    if getattr(args, "query", None):
         sql = args.query
-    elif args.table:
-        schema = quote_ident(args.schema or "main")
+    elif getattr(args, "table", None):
+        schema = quote_ident(getattr(args, "schema", None) or "main")
         tbl = quote_ident(args.table)
         sql = f"SELECT * FROM {schema}.{tbl}"
     else:
@@ -1081,8 +1081,14 @@ def cmd_pandas(conn, args) -> dict:
     except duckdb.Error as exc:
         raise ToolError(str(exc), EXIT_SQL_ERROR, {"sql": sql}) from exc
 
-    expr = args.expr
+    expr = getattr(args, "expr", None) or getattr(args, "pandas", None) or getattr(args, "df_expr", None)
     if not expr or not expr.strip():
+        expr = "df.head()"
+
+    try:
+        res = eval(expr, {"df": df, "pd": pd, "np": np, "pandas": pd, "numpy": np})
+    except Exception as exc:
+        raise ToolError(f"Error evaluating Pandas expression '{expr}': {exc}", EXIT_VALIDATION_ERROR) from exc
         expr = "df.head()"
 
     try:
@@ -1367,9 +1373,10 @@ def build_parser() -> argparse.ArgumentParser:
     _add_estimate_flag(p)
     p.set_defaults(func=cmd_profile)
 
-    p = sub.add_parser("pandas", help="Execute Pandas operations/expressions on a table or query DataFrame.")
+    p = sub.add_parser("pandas", help="Execute Pandas operations/expressions directly on a table or query DataFrame.")
     p.add_argument("table", nargs="?", help="Table to load into DataFrame (e.g. ohlcv_5m).")
-    p.add_argument("--expr", required=True, help="Pandas expression to evaluate on 'df' (e.g. \"df.groupby('status')['pnl'].sum()\")")
+    p.add_argument("expr", nargs="?", help="Pandas expression to evaluate on 'df' (e.g. \"df.groupby('status')['pnl'].sum()\")")
+    p.add_argument("--expr", help="Optional --expr flag alias for the Pandas expression.")
     p.add_argument("--query", help="Custom SQL query to produce the input DataFrame instead of a table.")
     _add_schema_flag(p)
     p.set_defaults(func=cmd_pandas)
