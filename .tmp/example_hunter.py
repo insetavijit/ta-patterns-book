@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Example Hunter CLI script with crisp, 100% opaque candlestick rendering.
+"""Example Hunter CLI script centered on the target pattern candle (10 prior bars + Target + 10 future bars).
 
 Features:
-- Solid, opaque candle bodies with zero wick leakage inside the body.
+- Centered layout: 10 context bars before, Target Pattern Candle in Blue (middle), 10 future bars after.
+- Solid 100% opaque candle bodies (no internal wick leakage).
 - Single-pattern mode: Displays 12 real market examples of 1 specified pattern.
 - Multi-pattern mode: Displays 1 real market example for up to 12 DIFFERENT patterns in a single canvas.
-- Custom market colors (Blue target candle, Ash context candles).
 
 Usage:
     python Utils/example_hunter.py --pattern hammer
@@ -94,7 +94,7 @@ def load_ohlcv_data(db_path: Path):
 def draw_candlestick_subsegment(
     ax, opens, highs, lows, closes, timestamps, target_idx, title
 ):
-    """Draw crisp, 100% opaque candlestick plot with zero internal wick leakage."""
+    """Draw centered candlestick plot: 10 prior bars + Target Blue Candle + 10 future bars."""
     n = len(closes)
     x = np.arange(n)
 
@@ -121,7 +121,7 @@ def draw_candlestick_subsegment(
         body_top = max(opens[i], closes[i])
         body_height = max(abs(closes[i] - opens[i]), 0.00005)
 
-        # 1. Draw top wick (body top -> high) and bottom wick (low -> body bottom)
+        # 1. Top & bottom wicks
         ax.plot(
             [x[i], x[i]],
             [body_top, highs[i]],
@@ -137,7 +137,7 @@ def draw_candlestick_subsegment(
             zorder=2,
         )
 
-        # 2. Draw 100% opaque candle body (zorder=3) so no internal wicks are visible
+        # 2. 100% opaque candle body (zorder=3)
         ax.bar(
             x[i],
             body_height,
@@ -185,10 +185,11 @@ def hunt_single_pattern(
     c,
     v,
     max_examples: int,
-    context_bars: int,
+    prior_bars: int,
+    post_bars: int,
     output_path: Path,
 ):
-    """Scan and plot 12 examples of ONE single pattern."""
+    """Scan and plot 12 centered examples of ONE single pattern."""
     fn, category = find_pattern_function(pattern_name)
     if fn is None:
         print(f"[-] Pattern '{pattern_name}' not found in library.")
@@ -196,7 +197,10 @@ def hunt_single_pattern(
 
     signals = run_detector(fn, category, o, h, l, c, v)
     hit_indices = np.where(signals != 0)[0]
-    valid_hits = [idx for idx in hit_indices if idx >= context_bars]
+    total_len = len(df)
+    valid_hits = [
+        idx for idx in hit_indices if idx >= prior_bars and idx + post_bars < total_len
+    ]
     total_found = len(valid_hits)
 
     print(
@@ -221,8 +225,8 @@ def hunt_single_pattern(
     axes = np.array(axes).flatten() if n_plots > 1 else [axes]
 
     for idx, hit_idx in enumerate(selected_hits):
-        start_idx = hit_idx - context_bars
-        end_idx = hit_idx + 1
+        start_idx = hit_idx - prior_bars
+        end_idx = hit_idx + post_bars + 1
 
         sub_o = o[start_idx:end_idx]
         sub_h = h[start_idx:end_idx]
@@ -236,7 +240,7 @@ def hunt_single_pattern(
         sig_val = signals[hit_idx]
         dir_str = "Bullish (+1)" if sig_val > 0 else "Bearish (-1)"
 
-        title = f"#{idx+1} {target_ts_str}\nClose: {sub_c[-1]:.5f} [{dir_str}]"
+        title = f"#{idx+1} {target_ts_str}\nClose: {c[hit_idx]:.5f} [{dir_str}]"
         draw_candlestick_subsegment(
             axes[idx],
             sub_o,
@@ -244,7 +248,7 @@ def hunt_single_pattern(
             sub_l,
             sub_c,
             sub_ts,
-            target_idx=context_bars,
+            target_idx=prior_bars,
             title=title,
         )
 
@@ -252,7 +256,7 @@ def hunt_single_pattern(
         axes[j].axis("off")
 
     plt.suptitle(
-        f"Pattern Hunter — '{pattern_name}' in Real EUR/USD Data ({total_found:,} occurrences)",
+        f"Pattern Hunter — Centered '{pattern_name}' in Real EUR/USD Data ({total_found:,} occurrences)",
         fontsize=14,
         fontweight="bold",
         y=0.99,
@@ -264,10 +268,20 @@ def hunt_single_pattern(
 
 
 def hunt_multi_patterns(
-    pattern_list: list, df, o, h, l, c, v, context_bars: int, output_path: Path
+    pattern_list: list,
+    df,
+    o,
+    h,
+    l,
+    c,
+    v,
+    prior_bars: int,
+    post_bars: int,
+    output_path: Path,
 ):
-    """Scan and plot 1 real example for EACH of up to 12 DIFFERENT patterns."""
+    """Scan and plot 1 centered real example for EACH of up to 12 DIFFERENT patterns."""
     found_examples = []
+    total_len = len(df)
 
     for p_name in pattern_list:
         if len(found_examples) >= 12:
@@ -281,7 +295,9 @@ def hunt_multi_patterns(
             continue
 
         hit_indices = np.where(signals != 0)[0]
-        valid_hits = [idx for idx in hit_indices if idx >= context_bars]
+        valid_hits = [
+            idx for idx in hit_indices if idx >= prior_bars and idx + post_bars < total_len
+        ]
 
         if valid_hits:
             hit_idx = valid_hits[len(valid_hits) // 2]
@@ -311,8 +327,8 @@ def hunt_multi_patterns(
         p_name = item["pattern_name"]
         hit_idx = item["hit_idx"]
 
-        start_idx = hit_idx - context_bars
-        end_idx = hit_idx + 1
+        start_idx = hit_idx - prior_bars
+        end_idx = hit_idx + post_bars + 1
 
         sub_o = o[start_idx:end_idx]
         sub_h = h[start_idx:end_idx]
@@ -323,7 +339,7 @@ def hunt_multi_patterns(
             df["timestamp"].iloc[hit_idx].strftime("%Y-%m-%d %H:%M")
         )
 
-        title = f"{idx+1}. {p_name}\n{target_ts_str} | {sub_c[-1]:.5f}"
+        title = f"{idx+1}. {p_name}\n{target_ts_str} | {c[hit_idx]:.5f}"
         draw_candlestick_subsegment(
             axes[idx],
             sub_o,
@@ -331,7 +347,7 @@ def hunt_multi_patterns(
             sub_l,
             sub_c,
             sub_ts,
-            target_idx=context_bars,
+            target_idx=prior_bars,
             title=title,
         )
 
@@ -339,7 +355,7 @@ def hunt_multi_patterns(
         axes[j].axis("off")
 
     plt.suptitle(
-        f"Pattern Hunter — 12 Distinct Real Market Patterns (EUR/USD 5m)",
+        f"Pattern Hunter — 12 Centered Patterns (10 prior bars | Target Blue | 10 future bars)",
         fontsize=14,
         fontweight="bold",
         y=0.99,
@@ -354,7 +370,7 @@ def hunt_multi_patterns(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Hunt and plot real technical analysis patterns with opaque candle bodies."
+        description="Hunt and plot real technical analysis patterns centered in a 10-Target-10 bar window."
     )
     parser.add_argument(
         "-p",
@@ -396,11 +412,16 @@ def main():
         help="Maximum examples (default: 12)",
     )
     parser.add_argument(
-        "-b",
-        "--context-bars",
+        "--prior-bars",
         type=int,
-        default=14,
-        help="Number of context bars before target pattern bar (default: 14)",
+        default=10,
+        help="Context bars before target pattern bar (default: 10)",
+    )
+    parser.add_argument(
+        "--post-bars",
+        type=int,
+        default=10,
+        help="Outcome bars after target pattern bar (default: 10)",
     )
     parser.add_argument(
         "-o",
@@ -433,10 +454,19 @@ def main():
             Path(args.out)
             if args.out
             else DEFAULT_OUT_DIR
-            / f"pattern_hunter_opaque_{args.family.replace('+', 'plus')}.png"
+            / f"pattern_hunter_centered_{args.family.replace('+', 'plus')}.png"
         )
         hunt_multi_patterns(
-            pattern_list, df, o, h, l, c, v, args.context_bars, out_file
+            pattern_list,
+            df,
+            o,
+            h,
+            l,
+            c,
+            v,
+            args.prior_bars,
+            args.post_bars,
+            out_file,
         )
 
     else:
@@ -444,7 +474,7 @@ def main():
         out_file = (
             Path(args.out)
             if args.out
-            else DEFAULT_OUT_DIR / f"pattern_hunter_opaque_{pattern_name}.png"
+            else DEFAULT_OUT_DIR / f"pattern_hunter_centered_{pattern_name}.png"
         )
         hunt_single_pattern(
             pattern_name,
@@ -455,7 +485,8 @@ def main():
             c,
             v,
             args.max_examples,
-            args.context_bars,
+            args.prior_bars,
+            args.post_bars,
             out_file,
         )
 
