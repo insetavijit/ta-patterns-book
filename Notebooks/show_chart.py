@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Show Trade Chart Script.
+"""Show Trade Chart Script with Vertical Lines for Signal & Entry Candles.
 
 Loads trade details and OHLCV data from Shared/Data/eur_usd_trades_5m.duckdb.
 Window: 20 previous candles + Trade duration candles + 20 outcome candles.
 Candle colors: Standard Green/Red (no blue candles).
-Annotations: Horizontal SL line, TP line, Entry line, and Entry Candle marker.
+Vertical Lines:
+  - Signal Candle vline (purple dashed)
+  - Entry Candle vline (blue solid)
+Price Lines: SL line (red dashed), TP line (green dashed), Entry line (blue dotted).
 
 Output: Shared/OUTs/png/trade_1_chart.png
 """
@@ -104,7 +107,7 @@ def load_trade_and_ohlcv(trade_id: int = 1, month_table: str = "jan_2025"):
 def draw_trade_chart(
     trade, ohlcv_df, entry_idx: int, prior_bars: int = 20, post_bars: int = 20
 ):
-    """Render trade chart with 20 prior bars, 20 post bars, SL/TP lines, and Green/Red candles."""
+    """Render trade chart with vertical lines for Signal & Entry candles."""
     duration_bars = int(trade["duration_candel"]) if trade["duration_candel"] and not pd.isna(trade["duration_candel"]) else 3
     start_idx = max(0, entry_idx - prior_bars)
     end_idx = min(len(ohlcv_df), entry_idx + duration_bars + post_bars)
@@ -119,6 +122,7 @@ def draw_trade_chart(
     n = len(closes)
     x = np.arange(n)
     entry_sub_idx = entry_idx - start_idx
+    signal_sub_idx = entry_sub_idx - 1
 
     sns.set_theme(style="white")
     fig, ax = plt.subplots(figsize=(14, 7))
@@ -173,17 +177,37 @@ def draw_trade_chart(
     sl_price = float(trade["sl_price"]) if not pd.isna(trade["sl_price"]) else None
     tp_price = float(trade["tp_price"]) if not pd.isna(trade["tp_price"]) else None
 
-    # Draw Entry Price Line (Blue dotted)
+    # 1. Vertical Line for Signal Candle (Purple dashed)
+    if signal_sub_idx >= 0:
+        ax.axvline(
+            x=signal_sub_idx,
+            color="#7b1fa2",
+            linestyle="--",
+            linewidth=1.5,
+            label=f"Signal Candle ({timestamps[signal_sub_idx]})",
+            zorder=4,
+        )
+
+    # 2. Vertical Line for Entry Candle (Blue solid)
+    ax.axvline(
+        x=entry_sub_idx,
+        color="#1565c0",
+        linestyle="-",
+        linewidth=1.8,
+        label=f"Entry Candle ({timestamps[entry_sub_idx]})",
+        zorder=4,
+    )
+
+    # Horizontal Price Lines (Entry, SL, TP)
     ax.axhline(
         y=entry_price,
         color="#1565c0",
         linestyle=":",
         linewidth=1.5,
-        label=f"Entry: {entry_price:.5f}",
+        label=f"Entry Price: {entry_price:.5f}",
         zorder=4,
     )
 
-    # Draw Stop Loss Line (Red dashed)
     if sl_price is not None:
         ax.axhline(
             y=sl_price,
@@ -194,7 +218,6 @@ def draw_trade_chart(
             zorder=4,
         )
 
-    # Draw Take Profit Line (Green dashed)
     if tp_price is not None:
         ax.axhline(
             y=tp_price,
@@ -205,20 +228,6 @@ def draw_trade_chart(
             zorder=4,
         )
 
-    # Annotate Entry Candle with Marker & Arrow
-    entry_candle_high = highs[entry_sub_idx]
-    ax.annotate(
-        "ENTRY CANDLE",
-        xy=(entry_sub_idx, entry_candle_high),
-        xytext=(entry_sub_idx, entry_candle_high + 0.00040),
-        arrowprops=dict(facecolor="#1565c0", edgecolor="#1565c0", shrink=0.08, width=1.5, headwidth=6),
-        ha="center",
-        fontsize=9,
-        fontweight="bold",
-        color="#0d47a1",
-        zorder=5,
-    )
-
     # Format Ticks & Aesthetics
     tick_step = max(1, n // 10)
     ax.set_xticks(x[::tick_step])
@@ -228,14 +237,14 @@ def draw_trade_chart(
     pnl_val = float(trade["pnl"]) if not pd.isna(trade["pnl"]) else 0.0
     status_str = f"WIN (+{pnl_val:.2f}$)" if pnl_val > 0 else f"LOSS ({pnl_val:.2f}$)"
     title_text = (
-        f"Trade #{int(trade['trade_id'])} ({trade['month_table']}) — Entry: {timestamps[entry_sub_idx]} | "
+        f"Trade #{int(trade['trade_id'])} ({trade['month_table']}) — Signal & Entry Candle Markers | "
         f"Duration: {duration_bars} bars ({trade['duration_mins']}m) | Status: {status_str}"
     )
 
     ax.set_title(title_text, fontsize=12, fontweight="bold", color="#1a237e", pad=12)
     ax.set_ylabel("EUR/USD Price", fontsize=9, fontweight="bold")
     ax.set_xlim(-0.8, n - 0.2)
-    ax.legend(loc="upper left", fontsize=9, frameon=True, facecolor="#ffffff", edgecolor="#b0bec5")
+    ax.legend(loc="upper left", fontsize=8.5, frameon=True, facecolor="#ffffff", edgecolor="#b0bec5")
 
     for spine in ["top", "right"]:
         ax.spines[spine].set_visible(False)
@@ -245,7 +254,7 @@ def draw_trade_chart(
     fig.savefig(OUT_FILE, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-    print(f"[+] Successfully rendered Trade #{int(trade['trade_id'])} chart to: {OUT_FILE.resolve()}")
+    print(f"[+] Successfully rendered Trade #{int(trade['trade_id'])} chart with Signal & Entry vlines to: {OUT_FILE.resolve()}")
 
 
 def main():
