@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Get Patterns Script for OHLCV Candle Ranges.
+"""Get Patterns Script for OHLCV Candle Lookback Ranges.
 
-Scans a specified candle index/timestamp range against all 300 technical analysis
-pattern detectors and outputs a table of detected patterns in that range.
+Scans a 15-candle lookback range prior to trade entry (or custom candle index/timestamp range)
+against all 300 technical analysis pattern detectors and reports a table of detected patterns.
 
 Usage:
-    uv run python Notebooks/get_patterns.py --start 100 --end 150
-    uv run python Notebooks/get_patterns.py --trade-id 1 --context 10
-    uv run python Notebooks/get_patterns.py --start "2025-01-02 08:00" --end "2025-01-02 10:00"
+    uv run python Notebooks/get_patterns.py --trade-id 1
+    uv run python Notebooks/get_patterns.py --trade-id 1 --context 15
+    uv run python Notebooks/get_patterns.py --start 100 --end 115
 """
 
 import argparse
@@ -160,7 +160,7 @@ def scan_patterns_in_range(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Scan and report all pattern occurrences within a specific candle range."
+        description="Scan and report all pattern occurrences within a 15-candle lookback range."
     )
     parser.add_argument(
         "--db",
@@ -178,19 +178,19 @@ def main():
         "--end",
         type=str,
         default=None,
-        help="End bar index or timestamp (e.g. 120 or '2025-01-02 10:00')",
+        help="End bar index or timestamp (e.g. 115 or '2025-01-02 08:20')",
     )
     parser.add_argument(
         "--trade-id",
         type=int,
         default=None,
-        help="Scan candle range around a specific trade_id",
+        help="Scan 15-candle lookback range prior to trade entry for trade_id",
     )
     parser.add_argument(
         "--context",
         type=int,
-        default=10,
-        help="Context bars before/after trade entry when using --trade-id (default: 10)",
+        default=15,
+        help="Lookback candle count prior to trade entry (default: 15)",
     )
 
     args = parser.parse_args()
@@ -234,9 +234,12 @@ def main():
             if len(hit_indices) > 0:
                 e_idx = hit_indices[0]
                 start_idx = max(0, e_idx - args.context)
-                end_idx = min(total_bars - 1, e_idx + args.context)
+                end_idx = e_idx
                 print(
-                    f"[+] Trade #{args.trade_id} Entry at Bar {e_idx} ({df['timestamp'].iloc[e_idx]}). Scanning range: Bars {start_idx}..{end_idx}"
+                    f"[+] Trade #{args.trade_id} Entry at Bar {e_idx} ({df['timestamp'].iloc[e_idx]})."
+                )
+                print(
+                    f"[+] Lookback range ({args.context} candles prior to entry): Bars {start_idx}..{end_idx} ({df['timestamp'].iloc[start_idx]} to {df['timestamp'].iloc[end_idx]})"
                 )
 
     conn.close()
@@ -261,19 +264,19 @@ def main():
             end_idx = diffs.idxmin()
 
     print(
-        f"[+] Scanning candle range: Bars {start_idx} to {end_idx} ({df['timestamp'].iloc[start_idx]} to {df['timestamp'].iloc[end_idx]}, Total {end_idx - start_idx + 1} candles)..."
+        f"[+] Scanning 15-candle lookback range: Bars {start_idx} to {end_idx} ({df['timestamp'].iloc[start_idx]} to {df['timestamp'].iloc[end_idx]}, Total {end_idx - start_idx + 1} candles)..."
     )
 
     catalog_meta = load_catalog_metadata()
     results = scan_patterns_in_range(df, start_idx, end_idx, catalog_meta)
 
     print(
-        f"\n### 📊 Pattern Detection Report (Range: Bars {start_idx}..{end_idx})\n"
+        f"\n### 📊 Pattern Detection Report (15-Candle Lookback: Bars {start_idx}..{end_idx})\n"
     )
     print(f"**Total Patterns Fired**: {len(results)}\n")
 
     if not results:
-        print("No technical analysis patterns fired in this candle range.")
+        print("No technical analysis patterns fired in this 15-candle lookback range.")
         return
 
     # Print clean Markdown Table
