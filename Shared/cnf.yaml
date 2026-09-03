@@ -77,6 +77,18 @@ paths:
     path: "Utils"
     purpose: "Helper utilities, common math/date functions, and data transformations."
 
+# Project Tools & Executables Reference
+tools:
+  duckdb_explorer:
+    path: "Utils/duckdb_explorer.py"
+    purpose: "Interactive terminal utility for inspecting, querying, and exploring DuckDB database tables, schemas, and pattern datasets."
+  example_hunter:
+    path: "Utils/example_hunter.py"
+    purpose: "CLI tool for hunting real market technical analysis patterns from DuckDB datasets and plotting centered mplfinance canvases."
+  seed_catalog:
+    path: "Utils/seed_catalog.py"
+    purpose: "Database seeder script for extracting and populating pattern_catalog metadata for all 300 technical-analysis detectors."
+
 # Quick File Routing Table (AI & Developer Placement Reference)
 file_routing:
   - pattern: "ADR-*.md"
