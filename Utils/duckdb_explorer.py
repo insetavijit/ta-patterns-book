@@ -1086,13 +1086,13 @@ def cmd_pandas(conn, args) -> dict:
         expr = "df.head()"
 
     try:
-        res = eval(expr, {"df": df, "pd": pd, "np": np, "pandas": pd, "numpy": np})
-    except Exception as exc:
-        raise ToolError(f"Error evaluating Pandas expression '{expr}': {exc}", EXIT_VALIDATION_ERROR) from exc
-        expr = "df.head()"
-
-    try:
-        res = eval(expr, {"df": df, "pd": pd, "np": np, "pandas": pd, "numpy": np})
+        if "df.info" in expr:
+            import io
+            buf = io.StringIO()
+            df.info(buf=buf)
+            res = buf.getvalue()
+        else:
+            res = eval(expr, {"df": df, "pd": pd, "np": np, "pandas": pd, "numpy": np})
     except Exception as exc:
         raise ToolError(f"Error evaluating Pandas expression '{expr}': {exc}", EXIT_VALIDATION_ERROR) from exc
 
