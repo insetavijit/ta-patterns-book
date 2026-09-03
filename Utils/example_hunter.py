@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Example Hunter CLI script using mplfinance for professional candlestick charts.
+"""Example Hunter CLI script with crisp, 100% opaque candlestick rendering.
 
 Features:
-- Powered by `mplfinance` (mpf) for high-performance financial plotting.
+- Solid, opaque candle bodies with zero wick leakage inside the body.
 - Single-pattern mode: Displays 12 real market examples of 1 specified pattern.
 - Multi-pattern mode: Displays 1 real market example for up to 12 DIFFERENT patterns in a single canvas.
-- No gridlines, custom market colors (Blue target candle, Ash context candles).
+- Custom market colors (Blue target candle, Ash context candles).
 
 Usage:
     python Utils/example_hunter.py --pattern hammer
@@ -21,7 +21,6 @@ import matplotlib
 
 matplotlib.use("Agg")  # Headless rendering
 import matplotlib.pyplot as plt
-import mplfinance as mpf
 import numpy as np
 import pandas as pd
 import ta_patterns as tap
@@ -31,19 +30,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DB = BASE_DIR / "Shared" / "OUTs" / "ohlcv_5m.duckdb"
 DEFAULT_OUT_DIR = BASE_DIR / "Shared" / "OUTs"
 CATALOG_DB = BASE_DIR / "Shared" / "Data" / "memory.duckdb"
-
-# Define mplfinance style ONCE globally for fast rendering
-MC = mpf.make_marketcolors(
-    up="#1e88e5",
-    down="#37474f",
-    edge="inherit",
-    wick={"up": "#1565c0", "down": "#263238"},
-)
-MPF_STYLE = mpf.make_mpf_style(
-    marketcolors=MC,
-    gridstyle="",  # Disable gridlines
-    y_on_right=False,
-)
 
 
 def find_pattern_function(pattern_name: str):
@@ -101,48 +87,57 @@ def load_ohlcv_data(db_path: Path):
     ).fetchdf()
     conn.close()
 
-    # Format timestamp for mplfinance
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     return df, table_name
 
 
-def draw_candlestick_subsegment(ax, sub_df, title, target_idx):
-    """Draw custom colored candlestick plot on a Matplotlib axis."""
-    n = len(sub_df)
+def draw_candlestick_subsegment(
+    ax, opens, highs, lows, closes, timestamps, target_idx, title
+):
+    """Draw crisp, 100% opaque candlestick plot with zero internal wick leakage."""
+    n = len(closes)
     x = np.arange(n)
 
     ax.grid(False)
 
-    opens = sub_df["open"].to_numpy()
-    highs = sub_df["high"].to_numpy()
-    lows = sub_df["low"].to_numpy()
-    closes = sub_df["close"].to_numpy()
-
     for i in range(n):
-        if i == target_idx:
-            color = "#1e88e5"  # Bright Blue target candle
+        is_target = i == target_idx
+        is_bullish = closes[i] >= opens[i]
+
+        if is_target:
+            color = "#1e88e5"  # Solid Bright Blue target candle body
             edge_color = "#1565c0"
-            alpha = 1.0
             lw = 1.8
         else:
-            if closes[i] >= opens[i]:
-                color = "#b0bec5"  # Light ash
+            if is_bullish:
+                color = "#b0bec5"  # Solid Light Ash
                 edge_color = "#78909c"
             else:
-                color = "#37474f"  # Dark ash
+                color = "#37474f"  # Solid Dark Ash
                 edge_color = "#263238"
-            alpha = 0.85
             lw = 1.2
 
+        body_bottom = min(opens[i], closes[i])
+        body_top = max(opens[i], closes[i])
+        body_height = max(abs(closes[i] - opens[i]), 0.00005)
+
+        # 1. Draw top wick (body top -> high) and bottom wick (low -> body bottom)
         ax.plot(
             [x[i], x[i]],
-            [lows[i], highs[i]],
-            color=edge_color if i == target_idx else color,
+            [body_top, highs[i]],
+            color=edge_color,
             linewidth=lw,
+            zorder=2,
+        )
+        ax.plot(
+            [x[i], x[i]],
+            [lows[i], body_bottom],
+            color=edge_color,
+            linewidth=lw,
+            zorder=2,
         )
 
-        body_bottom = min(opens[i], closes[i])
-        body_height = max(abs(closes[i] - opens[i]), 0.00005)
+        # 2. Draw 100% opaque candle body (zorder=3) so no internal wicks are visible
         ax.bar(
             x[i],
             body_height,
@@ -150,8 +145,9 @@ def draw_candlestick_subsegment(ax, sub_df, title, target_idx):
             width=0.6,
             color=color,
             edgecolor=edge_color,
-            linewidth=1.0 if i == target_idx else 0.8,
-            alpha=alpha,
+            linewidth=1.2 if is_target else 0.8,
+            alpha=1.0,
+            zorder=3,
         )
 
     ax.set_title(title, fontsize=9, fontweight="bold", color="#1a237e")
@@ -228,23 +224,35 @@ def hunt_single_pattern(
         start_idx = hit_idx - context_bars
         end_idx = hit_idx + 1
 
-        sub_df = df.iloc[start_idx:end_idx].copy()
+        sub_o = o[start_idx:end_idx]
+        sub_h = h[start_idx:end_idx]
+        sub_l = l[start_idx:end_idx]
+        sub_c = c[start_idx:end_idx]
+        sub_ts = df["timestamp"].iloc[start_idx:end_idx].values
+
         target_ts_str = (
-            sub_df["timestamp"].iloc[-1].strftime("%Y-%m-%d %H:%M")
+            df["timestamp"].iloc[hit_idx].strftime("%Y-%m-%d %H:%M")
         )
         sig_val = signals[hit_idx]
         dir_str = "Bullish (+1)" if sig_val > 0 else "Bearish (-1)"
 
-        title = f"#{idx+1} {target_ts_str}\nClose: {sub_df['close'].iloc[-1]:.5f} [{dir_str}]"
+        title = f"#{idx+1} {target_ts_str}\nClose: {sub_c[-1]:.5f} [{dir_str}]"
         draw_candlestick_subsegment(
-            axes[idx], sub_df, title=title, target_idx=context_bars
+            axes[idx],
+            sub_o,
+            sub_h,
+            sub_l,
+            sub_c,
+            sub_ts,
+            target_idx=context_bars,
+            title=title,
         )
 
     for j in range(n_plots, len(axes)):
         axes[j].axis("off")
 
     plt.suptitle(
-        f"mplfinance Pattern Hunter — '{pattern_name}' in Real EUR/USD Data ({total_found:,} occurrences)",
+        f"Pattern Hunter — '{pattern_name}' in Real EUR/USD Data ({total_found:,} occurrences)",
         fontsize=14,
         fontweight="bold",
         y=0.99,
@@ -252,9 +260,7 @@ def hunt_single_pattern(
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(
-        f"[+] Output mplfinance canvas saved to: {output_path.resolve()}"
-    )
+    print(f"[+] Output canvas saved to: {output_path.resolve()}")
 
 
 def hunt_multi_patterns(
@@ -308,21 +314,32 @@ def hunt_multi_patterns(
         start_idx = hit_idx - context_bars
         end_idx = hit_idx + 1
 
-        sub_df = df.iloc[start_idx:end_idx].copy()
+        sub_o = o[start_idx:end_idx]
+        sub_h = h[start_idx:end_idx]
+        sub_l = l[start_idx:end_idx]
+        sub_c = c[start_idx:end_idx]
+        sub_ts = df["timestamp"].iloc[start_idx:end_idx].values
         target_ts_str = (
-            sub_df["timestamp"].iloc[-1].strftime("%Y-%m-%d %H:%M")
+            df["timestamp"].iloc[hit_idx].strftime("%Y-%m-%d %H:%M")
         )
 
-        title = f"{idx+1}. {p_name}\n{target_ts_str} | {sub_df['close'].iloc[-1]:.5f}"
+        title = f"{idx+1}. {p_name}\n{target_ts_str} | {sub_c[-1]:.5f}"
         draw_candlestick_subsegment(
-            axes[idx], sub_df, title=title, target_idx=context_bars
+            axes[idx],
+            sub_o,
+            sub_h,
+            sub_l,
+            sub_c,
+            sub_ts,
+            target_idx=context_bars,
+            title=title,
         )
 
     for j in range(n_plots, len(axes)):
         axes[j].axis("off")
 
     plt.suptitle(
-        f"mplfinance Pattern Hunter — 12 Distinct Real Market Patterns (EUR/USD 5m)",
+        f"Pattern Hunter — 12 Distinct Real Market Patterns (EUR/USD 5m)",
         fontsize=14,
         fontweight="bold",
         y=0.99,
@@ -331,13 +348,13 @@ def hunt_multi_patterns(
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(
-        f"[+] Output mplfinance multi-pattern canvas saved to: {output_path.resolve()}"
+        f"[+] Output multi-pattern canvas saved to: {output_path.resolve()}"
     )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Hunt and plot real technical analysis patterns using mplfinance."
+        description="Hunt and plot real technical analysis patterns with opaque candle bodies."
     )
     parser.add_argument(
         "-p",
@@ -416,7 +433,7 @@ def main():
             Path(args.out)
             if args.out
             else DEFAULT_OUT_DIR
-            / f"pattern_hunter_mplfinance_{args.family.replace('+', 'plus')}.png"
+            / f"pattern_hunter_opaque_{args.family.replace('+', 'plus')}.png"
         )
         hunt_multi_patterns(
             pattern_list, df, o, h, l, c, v, args.context_bars, out_file
@@ -427,7 +444,7 @@ def main():
         out_file = (
             Path(args.out)
             if args.out
-            else DEFAULT_OUT_DIR / f"pattern_hunter_mplfinance_{pattern_name}.png"
+            else DEFAULT_OUT_DIR / f"pattern_hunter_opaque_{pattern_name}.png"
         )
         hunt_single_pattern(
             pattern_name,

@@ -8,3 +8,19 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Generated output assets & images
+*.png
+*.jpg
+*.jpeg
+*.svg
+
+# Databases & data files (Ignore by default)
+*.duckdb
+*.duckdb.wal
+*.csv
+*.parquet
+
+# EXCEPT data files inside Shared/Data/
+!Shared/Data/
+!Shared/Data/**
