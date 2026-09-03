@@ -1,0 +1,32 @@
+# Project Directory Structure & Configuration
+
+project:
+  name: ta-patterns-book
+  package_manager: uv
+
+paths:
+  trash: "__trash"
+  tmp: ".tmp"
+  core: "Core"
+  docs:
+    root: "DOCs"
+    artifacts: "DOCs/Artifacts"
+    adrs: "DOCs/Artifacts/ADRs"
+    bugs: "DOCs/Artifacts/BUGs"
+    plans: "DOCs/Artifacts/PLans"
+    guids: "DOCs/GUIDs"
+    notes:
+      root: "DOCs/NOTEs"
+      goal1: "DOCs/NOTEs/GOAL-1"
+      goal1_researches: "DOCs/NOTEs/GOAL-1/researches"
+      goal2: "DOCs/NOTEs/GOAL-2"
+      goal3: "DOCs/NOTEs/GOAL-3"
+  notebooks: "Notebooks"
+  shared:
+    root: "Shared"
+    inps: "Shared/INPs"
+    outs: "Shared/OUTs"
+    data: "Shared/Data"
+    config: "Shared/cnf.yaml"
+  tests: "Tests"
+  utils: "Utils"
