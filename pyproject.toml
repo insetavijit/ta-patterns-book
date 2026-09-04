@@ -12,6 +12,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "seaborn>=0.13.2",
     "ta-patterns>=1.1.1",
+    "tabulate>=0.10.0",
 ]
 
 [project.scripts]

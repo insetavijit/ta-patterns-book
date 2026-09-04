@@ -329,6 +329,7 @@ def generate_distribution_table(
     pattern_col: str = "entry_1",
     losses_only: bool = False,
     pattern_filter: str = None,
+    output_fmt: str = "text",
 ):
     con = get_db_connection(db_path, read_only=True)
     
@@ -339,13 +340,11 @@ def generate_distribution_table(
     if losses_only:
         where_clauses.append("t.pnl <= 0")
     if pattern_filter:
-        # If user passed e.g. "entry_1 = DR-DR-DR" without quotes or "entry_1 = 'DR-DR-DR'"
         filter_expr = pattern_filter.strip()
         if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
             col_part, val_part = filter_expr.split("=", 1)
             filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
         
-        # Qualify with table prefix if needed
         if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
             where_clauses.append(f"p.{filter_expr}")
         else:
@@ -396,22 +395,6 @@ def generate_distribution_table(
 
     display_df = df_dist[["pattern", "number of trades", "win", "loss", "win%", "ammount ( sum )"]].copy()
 
-    pd.set_option("display.max_columns", None)
-    pd.set_option("display.width", 1000)
-    pd.set_option("display.max_rows", 200)
-
-    title_suffix = ""
-    if losses_only:
-        title_suffix += " [LOSSES ONLY]"
-    if pattern_filter:
-        title_suffix += f" [FILTER: {pattern_filter}]"
-
-    print("\n" + "="*85)
-    print(f" PATTERN PERFORMANCE DISTRIBUTION FOR '{pattern_col}'{title_suffix} (View: {view_name})")
-    print("="*85)
-    print(display_df.to_string(index=False))
-    print("="*85)
-
     tot_trades = display_df["number of trades"].sum()
     tot_win = display_df["win"].sum()
     tot_loss = display_df["loss"].sum()
@@ -419,8 +402,30 @@ def generate_distribution_table(
     tot_pnl = df_dist["raw_pnl"].sum()
     tot_pnl_str = f"+${tot_pnl:,.2f}" if tot_pnl >= 0 else f"-${abs(tot_pnl):,.2f}"
 
-    print(f" TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}")
-    print("="*85 + "\n")
+    title_suffix = ""
+    if losses_only:
+        title_suffix += " [LOSSES ONLY]"
+    if pattern_filter:
+        title_suffix += f" [FILTER: {pattern_filter}]"
+
+    title_text = f"PATTERN PERFORMANCE DISTRIBUTION FOR '{pattern_col}'{title_suffix} (View: {view_name})"
+
+    if output_fmt == "markdown":
+        print(f"### {title_text}\n")
+        print(display_df.to_markdown(index=False))
+        print(f"\n**TOTALS**: `{tot_trades:,}` Trades | `{tot_win:,}` Wins | `{tot_loss:,}` Losses | **Win%**: `{tot_win_pct:.2f}%` | **Net PnL**: `{tot_pnl_str}`\n")
+    else:
+        pd.set_option("display.max_columns", None)
+        pd.set_option("display.width", 1000)
+        pd.set_option("display.max_rows", 200)
+
+        print("\n" + "="*85)
+        print(f" {title_text}")
+        print("="*85)
+        print(display_df.to_string(index=False))
+        print("="*85)
+        print(f" TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}")
+        print("="*85 + "\n")
 
 
 def generate_loss_profile(db_path: str, view_name: str = "trades"):

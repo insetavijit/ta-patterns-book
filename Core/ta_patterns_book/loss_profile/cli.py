@@ -25,9 +25,11 @@ def main():
     parser.add_argument("--pattern-filter", "--filter", type=str, default=None, help="Filter trades by pattern expression (e.g. entry_1=DR-DR-DR)")
     parser.add_argument("--losses-only", action="store_true", help="Filter breakdown to show losses only (pnl <= 0)")
     parser.add_argument("--loss", nargs="?", const=12, type=int, default=None, help="Show head of losing trades table & render Trade Playbook (default limit: 12)")
+    parser.add_argument("--output", "--fmt", "-o", choices=["text", "markdown", "md"], default="text", help="Output format: 'text' (default) or 'markdown'/'md'")
 
     args = parser.parse_args()
     db_path = args.db if args.db else get_duckdb_path()
+    output_fmt = "markdown" if args.output in ["markdown", "md"] else "text"
 
     if args.distribution is not None:
         generate_distribution_table(
@@ -36,15 +38,16 @@ def main():
             pattern_col=args.distribution,
             losses_only=args.losses_only,
             pattern_filter=args.pattern_filter,
+            output_fmt=output_fmt,
         )
     elif args.loss_group:
-        generate_loss_group_table(db_path, view_name=args.view)
+        generate_loss_group_table(db_path, view_name=args.view, output_fmt=output_fmt)
     elif args.duration_group or args.duration_till is not None or args.losses_only:
-        generate_duration_table(db_path, view_name=args.view, duration_till=args.duration_till, losses_only=args.losses_only)
+        generate_duration_table(db_path, view_name=args.view, duration_till=args.duration_till, losses_only=args.losses_only, output_fmt=output_fmt)
     elif args.weekly:
-        generate_weekly_table(db_path, view_name=args.view)
+        generate_weekly_table(db_path, view_name=args.view, output_fmt=output_fmt)
     elif args.monthly is not None or args.loss is not None:
-        generate_monthly_table(db_path, view_name=args.view, month_filter=args.monthly, show_loss_head=args.loss)
+        generate_monthly_table(db_path, view_name=args.view, month_filter=args.monthly, show_loss_head=args.loss, output_fmt=output_fmt)
     else:
         generate_loss_profile(db_path, view_name=args.view)
 
