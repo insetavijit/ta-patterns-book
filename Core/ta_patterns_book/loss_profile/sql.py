@@ -131,6 +131,56 @@ def build_loss_group_query(
     """
 
 
+def build_projected_rr_group_query(
+    view_name: str = "trades",
+    losses_only: bool = False,
+    pattern_filter: str = None,
+) -> str:
+    where_clauses = []
+    if losses_only:
+        where_clauses.append("t.pnl <= 0")
+    if pattern_filter:
+        filter_expr = pattern_filter.strip()
+        if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
+            col_part, val_part = filter_expr.split("=", 1)
+            filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
+        
+        if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
+            where_clauses.append(f"p.{filter_expr}")
+        else:
+            where_clauses.append(filter_expr)
+
+    where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    from_clause = f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number JOIN projected_rr pr ON t.uid = pr.uid' if pattern_filter else f'"{view_name}" t JOIN projected_rr pr ON t.uid = pr.uid'
+
+    return f"""
+        SELECT 
+            CASE 
+                WHEN pr.projected_rr < 2.0 THEN '01. < 2.0 RR'
+                WHEN pr.projected_rr >= 2.0 AND pr.projected_rr < 3.0 THEN '02. 2.0 - 3.0 RR'
+                WHEN pr.projected_rr >= 3.0 AND pr.projected_rr < 4.0 THEN '03. 3.0 - 4.0 RR'
+                WHEN pr.projected_rr >= 4.0 AND pr.projected_rr < 5.0 THEN '04. 4.0 - 5.0 RR'
+                ELSE '05. >= 5.0 RR'
+            END AS rr_bracket,
+            COUNT(*) AS "number of trades",
+            COUNT(CASE WHEN t.pnl > 0 THEN 1 END) AS win,
+            COUNT(CASE WHEN t.pnl <= 0 THEN 1 END) AS loss,
+            ROUND(COUNT(CASE WHEN t.pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 2) AS "win%",
+            SUM(t.pnl) AS raw_pnl,
+            MIN(CASE 
+                WHEN pr.projected_rr < 2.0 THEN 1
+                WHEN pr.projected_rr >= 2.0 AND pr.projected_rr < 3.0 THEN 2
+                WHEN pr.projected_rr >= 3.0 AND pr.projected_rr < 4.0 THEN 3
+                WHEN pr.projected_rr >= 4.0 AND pr.projected_rr < 5.0 THEN 4
+                ELSE 5
+            END) AS sort_order
+        FROM {from_clause}
+        {where_str}
+        GROUP BY rr_bracket
+        ORDER BY sort_order ASC;
+    """
+
+
 def build_distribution_query(
     view_name: str = "trades",
     pattern_col: str = "entry_1",
@@ -183,3 +233,52 @@ def build_distribution_query(
             GROUP BY p."{pattern_col}"
             ORDER BY "number of trades" DESC, "win%" DESC;
         """
+
+
+def build_head_query(
+    view_name: str = "trades",
+    limit: int = 10,
+    pattern_filter: str = None,
+    duration: int = None,
+    duration_till: int = None,
+    losses_only: bool = False,
+) -> str:
+    where_clauses = []
+    if losses_only:
+        where_clauses.append("t.pnl <= 0")
+    if duration is not None:
+        where_clauses.append(f"t.duration_candel = {duration}")
+    if duration_till is not None:
+        where_clauses.append(f"t.duration_candel <= {duration_till}")
+    if pattern_filter:
+        filter_expr = pattern_filter.strip()
+        if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
+            col_part, val_part = filter_expr.split("=", 1)
+            filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
+        
+        if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
+            where_clauses.append(f"p.{filter_expr}")
+        else:
+            where_clauses.append(filter_expr)
+
+    where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    from_clause = f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number' if pattern_filter else f'"{view_name}" t'
+
+    pattern_cols = ", p.entry_1, p.entry_2, p.entry_3, p.entry_4" if pattern_filter else ""
+
+    return f"""
+        SELECT 
+            t.uid AS trade_number,
+            t.entry_time,
+            t.entry_price,
+            t.sl_price,
+            t.tp_price,
+            t.exit_reason,
+            t.pnl,
+            t.duration_candel
+            {pattern_cols}
+        FROM {from_clause}
+        {where_str}
+        ORDER BY t.entry_time ASC
+        LIMIT {limit};
+    """

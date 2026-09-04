@@ -12,8 +12,10 @@ from .db import get_db_connection, get_outs_dir, load_config
 from .sql import (
     build_distribution_query,
     build_duration_query,
+    build_head_query,
     build_loss_group_query,
     build_monthly_query,
+    build_projected_rr_group_query,
     build_weekly_query,
 )
 
@@ -283,6 +285,47 @@ def generate_loss_group_table(
     print_dataframe(display_df, title_text=title_text, totals_str=totals_str, output_fmt=output_fmt)
 
 
+def generate_projected_rr_table(
+    db_path: str,
+    view_name: str = "trades",
+    losses_only: bool = False,
+    pattern_filter: str = None,
+    output_fmt: str = "text",
+):
+    con = get_db_connection(db_path, read_only=True)
+    query = build_projected_rr_group_query(view_name=view_name, losses_only=losses_only, pattern_filter=pattern_filter)
+    df_rr_grp = con.execute(query).df()
+    con.close()
+
+    if df_rr_grp.empty:
+        print("No trades found for projected R:R breakdown.")
+        return
+
+    df_rr_grp["ammount ( sum )"] = df_rr_grp["raw_pnl"].apply(
+        lambda x: f"+${x:,.2f}" if x >= 0 else f"-${abs(x):,.2f}"
+    )
+
+    display_df = df_rr_grp[["rr_bracket", "number of trades", "win", "loss", "win%", "ammount ( sum )"]].copy()
+
+    tot_trades = display_df["number of trades"].sum()
+    tot_win = display_df["win"].sum()
+    tot_loss = display_df["loss"].sum()
+    tot_win_pct = round(tot_win / tot_trades * 100.0, 2) if tot_trades > 0 else 0.0
+    tot_pnl = df_rr_grp["raw_pnl"].sum()
+    tot_pnl_str = f"+${tot_pnl:,.2f}" if tot_pnl >= 0 else f"-${abs(tot_pnl):,.2f}"
+
+    title_suffix = ""
+    if losses_only:
+        title_suffix += " [LOSSES ONLY]"
+    if pattern_filter:
+        title_suffix += f" [FILTER: {pattern_filter}]"
+
+    title_text = f"PROJECTED R:R BRACKET STRATEGY PERFORMANCE BREAKDOWN{title_suffix}"
+    totals_str = f"TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}"
+
+    print_dataframe(display_df, title_text=title_text, totals_str=totals_str, output_fmt=output_fmt)
+
+
 def generate_distribution_table(
     db_path: str,
     view_name: str = "trades",
@@ -330,6 +373,61 @@ def generate_distribution_table(
 
     title_text = f"PATTERN PERFORMANCE DISTRIBUTION FOR '{pattern_col}'{title_suffix} (View: {view_name})"
     totals_str = f"TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}"
+
+    print_dataframe(display_df, title_text=title_text, totals_str=totals_str, output_fmt=output_fmt)
+
+
+def generate_head_table(
+    db_path: str,
+    view_name: str = "trades",
+    limit: int = 10,
+    pattern_filter: str = None,
+    duration: int = None,
+    duration_till: int = None,
+    losses_only: bool = False,
+    output_fmt: str = "text",
+):
+    con = get_db_connection(db_path, read_only=True)
+    query = build_head_query(
+        view_name=view_name,
+        limit=limit,
+        pattern_filter=pattern_filter,
+        duration=duration,
+        duration_till=duration_till,
+        losses_only=losses_only,
+    )
+    df_head = con.execute(query).df()
+    con.close()
+
+    if df_head.empty:
+        print("No matching trades found.")
+        return
+
+    df_head["pnl_str"] = df_head["pnl"].apply(
+        lambda x: f"+${x:,.2f}" if x >= 0 else f"-${abs(x):,.2f}"
+    )
+
+    display_cols = ["trade_number", "entry_time", "entry_price", "sl_price", "tp_price", "exit_reason", "pnl_str", "duration_candel"]
+    for c in ["entry_1", "entry_2", "entry_3", "entry_4"]:
+        if c in df_head.columns:
+            display_cols.append(c)
+
+    display_df = df_head[display_cols].copy()
+
+    title_suffix = ""
+    if pattern_filter:
+        title_suffix += f" [FILTER: {pattern_filter}]"
+    if duration is not None:
+        title_suffix += f" [DURATION: {duration} candle(s)]"
+    if duration_till is not None:
+        title_suffix += f" [DURATION <= {duration_till}]"
+    if losses_only:
+        title_suffix += " [LOSSES ONLY]"
+
+    title_text = f"TRADES HEAD (First {len(df_head)} Trades{title_suffix} | View: {view_name})"
+    tot_pnl = df_head["pnl"].sum()
+    tot_pnl_str = f"+${tot_pnl:,.2f}" if tot_pnl >= 0 else f"-${abs(tot_pnl):,.2f}"
+    totals_str = f"SUBTOTAL ({len(df_head)} Trades Shown) : Net PnL: {tot_pnl_str}"
 
     print_dataframe(display_df, title_text=title_text, totals_str=totals_str, output_fmt=output_fmt)
 
