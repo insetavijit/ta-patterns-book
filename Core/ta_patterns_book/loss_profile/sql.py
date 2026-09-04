@@ -37,11 +37,14 @@ def build_weekly_query(view_name: str = "trades") -> str:
 def build_duration_query(
     view_name: str = "trades",
     losses_only: bool = False,
+    wins_only: bool = False,
     pattern_filter: str = None,
 ) -> str:
     where_clauses = []
     if losses_only:
         where_clauses.append("t.pnl <= 0")
+    if wins_only:
+        where_clauses.append("t.pnl > 0")
     if pattern_filter:
         filter_expr = pattern_filter.strip()
         if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
@@ -134,11 +137,14 @@ def build_loss_group_query(
 def build_projected_rr_group_query(
     view_name: str = "trades",
     losses_only: bool = False,
+    wins_only: bool = False,
     pattern_filter: str = None,
 ) -> str:
     where_clauses = []
     if losses_only:
         where_clauses.append("t.pnl <= 0")
+    if wins_only:
+        where_clauses.append("t.pnl > 0")
     if pattern_filter:
         filter_expr = pattern_filter.strip()
         if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
@@ -185,12 +191,15 @@ def build_distribution_query(
     view_name: str = "trades",
     pattern_col: str = "entry_1",
     losses_only: bool = False,
+    wins_only: bool = False,
     pattern_filter: str = None,
     has_pattern_col: bool = False,
 ) -> str:
     where_clauses = []
     if losses_only:
         where_clauses.append("t.pnl <= 0")
+    if wins_only:
+        where_clauses.append("t.pnl > 0")
     if pattern_filter:
         filter_expr = pattern_filter.strip()
         if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):

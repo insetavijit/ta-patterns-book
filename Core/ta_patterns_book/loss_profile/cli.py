@@ -30,6 +30,12 @@ def main():
     parser.add_argument("--duration", "--dur", type=int, default=None, help="Exact candle duration filter (e.g. 1)")
     parser.add_argument("--pattern-filter", "--filter", type=str, default=None, help="Filter trades by pattern expression (e.g. entry_1=DR-DR-DR)")
     parser.add_argument("--losses-only", action="store_true", help="Filter breakdown to show losses only (pnl <= 0)")
+    parser.add_argument("--wins-only", action="store_true", help="Filter breakdown to show wins only (pnl > 0)")
+    parser.add_argument("--min-trades", type=int, default=None, help="Hide distribution rows with fewer than N trades")
+    parser.add_argument("--sort", choices=["win%", "trades", "pnl"], default=None, help="Sort distribution table by specified column")
+    parser.add_argument("--top", type=int, default=None, help="Show top N distribution rows after sorting")
+    parser.add_argument("--bottom", type=int, default=None, help="Show bottom N distribution rows after sorting")
+    parser.add_argument("--compare", type=str, default=None, help="Cross-axis side-by-side pivot comparison axis (e.g. --dist prr --compare entry_1)")
     parser.add_argument("--loss", nargs="?", const=12, type=int, default=None, help="Show head of losing trades table & render Trade Playbook (default limit: 12)")
     parser.add_argument("--output", "--fmt", "-o", choices=["text", "markdown", "md"], default="text", help="Output format: 'text' (default) or 'markdown'/'md'")
 
@@ -54,8 +60,14 @@ def main():
             axis=args.distribution,
             view_name=args.view,
             losses_only=args.losses_only,
+            wins_only=args.wins_only,
             pattern_filter=args.pattern_filter,
             duration_till=args.duration_till,
+            min_trades=args.min_trades,
+            sort=args.sort,
+            top=args.top,
+            bottom=args.bottom,
+            compare=args.compare,
             output_fmt=output_fmt,
         )
     elif args.projected_rr:

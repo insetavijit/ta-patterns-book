@@ -19,3 +19,9 @@ This document records explicit user corrections and operational guidelines to pr
 ## 3. Database Column & Schema Verification
 - **Correction**: Never guess table column names or table schemas in DuckDB SQL queries.
 - **Rule**: Inspect schemas beforehand via `duckdb_explorer` (e.g., column `duration_candel` vs `duration_candles`).
+
+---
+
+## 4. Loss Profiler CLI Distribution Contract
+- **Correction**: Do not use individual distribution flags (`--duration-group`, `--loss-group`, `-prr`, `--monthly`, `--weekly`).
+- **Rule**: Always use the unified `--dist <axis>` interface (e.g., `--dist entry_1`, `--dist prr`, `--dist duration`, `--dist loss`, `--dist monthly`, `--dist weekly`) along with composable modifiers (`--wins-only`, `--sort`, `--min-trades`, `--top`, `--bottom`, `--compare`).

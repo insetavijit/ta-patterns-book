@@ -189,16 +189,43 @@ def generate_weekly_table(db_path: str, view_name: str = "trades", output_fmt: s
     print_dataframe(display_df, title_text=title_text, totals_str=totals_str, output_fmt=output_fmt)
 
 
+def apply_table_modifiers(df: pd.DataFrame, min_trades: int = None, sort: str = None, top: int = None, bottom: int = None) -> pd.DataFrame:
+    """Applies uniform post-query modifiers: min-trades filter, sort, and top/bottom slicing."""
+    res = df.copy()
+    if min_trades is not None and "number of trades" in res.columns:
+        res = res[res["number of trades"] >= min_trades].copy()
+    
+    if sort:
+        sort_map = {"win%": "win%", "trades": "number of trades", "pnl": "raw_pnl"}
+        sort_col = sort_map.get(sort.lower())
+        if sort_col and sort_col in res.columns:
+            res = res.sort_values(by=sort_col, ascending=False).reset_index(drop=True)
+            if "sort_order" in res.columns:
+                res = res.drop(columns=["sort_order"])
+
+    if top is not None:
+        res = res.head(top).copy()
+    elif bottom is not None:
+        res = res.tail(bottom).copy()
+
+    return res
+
+
 def generate_duration_table(
     db_path: str,
     view_name: str = "trades",
     duration_till: int = None,
     losses_only: bool = False,
+    wins_only: bool = False,
     pattern_filter: str = None,
+    min_trades: int = None,
+    sort: str = None,
+    top: int = None,
+    bottom: int = None,
     output_fmt: str = "text",
 ):
     con = get_db_connection(db_path, read_only=True)
-    query = build_duration_query(view_name=view_name, losses_only=losses_only, pattern_filter=pattern_filter)
+    query = build_duration_query(view_name=view_name, losses_only=losses_only, wins_only=wins_only, pattern_filter=pattern_filter)
     df_dur = con.execute(query).df()
     con.close()
 
@@ -216,6 +243,8 @@ def generate_duration_table(
     if duration_till is not None:
         df_dur = df_dur[df_dur["min_dur"] <= duration_till].copy()
 
+    df_dur = apply_table_modifiers(df_dur, min_trades=min_trades, sort=sort, top=top, bottom=bottom)
+
     df_dur["ammount ( sum )"] = df_dur["raw_pnl"].apply(
         lambda x: f"+${x:,.2f}" if x >= 0 else f"-${abs(x):,.2f}"
     )
@@ -225,27 +254,15 @@ def generate_duration_table(
     title_suffix = ""
     if losses_only:
         title_suffix += " [LOSSES ONLY]"
+    if wins_only:
+        title_suffix += " [WINS ONLY]"
     if pattern_filter:
         title_suffix += f" [FILTER: {pattern_filter}]"
     if duration_till is not None:
         title_suffix += f" (TILL DURATION <= {duration_till})"
 
     title_text = f"DURATION BRACKET STRATEGY PERFORMANCE BREAKDOWN{title_suffix}"
-
-    if duration_till is not None:
-        tot_trades_till = display_df["number of trades"].sum()
-        tot_win_till = display_df["win"].sum()
-        tot_loss_till = display_df["loss"].sum()
-        tot_win_pct_till = round(tot_win_till / tot_trades_till * 100.0, 2) if tot_trades_till > 0 else 0.0
-        tot_pnl_till = df_dur["raw_pnl"].sum()
-        tot_pnl_str_till = f"+${tot_pnl_till:,.2f}" if tot_pnl_till >= 0 else f"-${abs(tot_pnl_till):,.2f}"
-
-        totals_str = (
-            f"TOTALS (FULL)    : {tot_trades_full:,} Trades | {tot_win_full:,} Wins | {tot_loss_full:,} Losses | Win%: {tot_win_pct_full:.2f}% | Net PnL: {tot_pnl_str_full}\n"
-            f"TOTALS (TILL <={duration_till}) : {tot_trades_till:,} Trades | {tot_win_till:,} Wins | {tot_loss_till:,} Losses | Win%: {tot_win_pct_till:.2f}% | Net PnL: {tot_pnl_str_till}"
-        )
-    else:
-        totals_str = f"TOTALS : {tot_trades_full:,} Trades | {tot_win_full:,} Wins | {tot_loss_full:,} Losses | Win%: {tot_win_pct_full:.2f}% | Net PnL: {tot_pnl_str_full}"
+    totals_str = f"TOTALS : {tot_trades_full:,} Trades | {tot_win_full:,} Wins | {tot_loss_full:,} Losses | Win%: {tot_win_pct_full:.2f}% | Net PnL: {tot_pnl_str_full}"
 
     print_dataframe(display_df, title_text=title_text, totals_str=totals_str, output_fmt=output_fmt)
 
@@ -289,17 +306,24 @@ def generate_projected_rr_table(
     db_path: str,
     view_name: str = "trades",
     losses_only: bool = False,
+    wins_only: bool = False,
     pattern_filter: str = None,
+    min_trades: int = None,
+    sort: str = None,
+    top: int = None,
+    bottom: int = None,
     output_fmt: str = "text",
 ):
     con = get_db_connection(db_path, read_only=True)
-    query = build_projected_rr_group_query(view_name=view_name, losses_only=losses_only, pattern_filter=pattern_filter)
+    query = build_projected_rr_group_query(view_name=view_name, losses_only=losses_only, wins_only=wins_only, pattern_filter=pattern_filter)
     df_rr_grp = con.execute(query).df()
     con.close()
 
     if df_rr_grp.empty:
         print("No trades found for projected R:R breakdown.")
         return
+
+    df_rr_grp = apply_table_modifiers(df_rr_grp, min_trades=min_trades, sort=sort, top=top, bottom=bottom)
 
     df_rr_grp["ammount ( sum )"] = df_rr_grp["raw_pnl"].apply(
         lambda x: f"+${x:,.2f}" if x >= 0 else f"-${abs(x):,.2f}"
@@ -317,6 +341,8 @@ def generate_projected_rr_table(
     title_suffix = ""
     if losses_only:
         title_suffix += " [LOSSES ONLY]"
+    if wins_only:
+        title_suffix += " [WINS ONLY]"
     if pattern_filter:
         title_suffix += f" [FILTER: {pattern_filter}]"
 
@@ -331,7 +357,12 @@ def generate_distribution_table(
     view_name: str = "trades",
     pattern_col: str = "entry_1",
     losses_only: bool = False,
+    wins_only: bool = False,
     pattern_filter: str = None,
+    min_trades: int = None,
+    sort: str = None,
+    top: int = None,
+    bottom: int = None,
     output_fmt: str = "text",
 ):
     con = get_db_connection(db_path, read_only=True)
@@ -342,6 +373,7 @@ def generate_distribution_table(
         view_name=view_name,
         pattern_col=pattern_col,
         losses_only=losses_only,
+        wins_only=wins_only,
         pattern_filter=pattern_filter,
         has_pattern_col=has_pattern_col,
     )
@@ -351,6 +383,8 @@ def generate_distribution_table(
     if df_dist.empty:
         print(f"No trades found for pattern column '{pattern_col}' with filter '{pattern_filter}'.")
         return
+
+    df_dist = apply_table_modifiers(df_dist, min_trades=min_trades, sort=sort, top=top, bottom=bottom)
 
     df_dist["ammount ( sum )"] = df_dist["raw_pnl"].apply(
         lambda x: f"+${x:,.2f}" if x >= 0 else f"-${abs(x):,.2f}"
@@ -368,6 +402,8 @@ def generate_distribution_table(
     title_suffix = ""
     if losses_only:
         title_suffix += " [LOSSES ONLY]"
+    if wins_only:
+        title_suffix += " [WINS ONLY]"
     if pattern_filter:
         title_suffix += f" [FILTER: {pattern_filter}]"
 
@@ -386,25 +422,120 @@ AXIS_ALIASES = {
 }
 
 
+def generate_compare_table(
+    db_path: str,
+    primary_axis: str,
+    compare_axis: str,
+    view_name: str = "trades",
+    losses_only: bool = False,
+    wins_only: bool = False,
+    pattern_filter: str = None,
+    output_fmt: str = "text",
+):
+    """Generates cross-axis side-by-side pivot breakdown table comparing primary_axis vs compare_axis."""
+    con = get_db_connection(db_path, read_only=True)
+    
+    where_clauses = []
+    if losses_only:
+        where_clauses.append("t.pnl <= 0")
+    if wins_only:
+        where_clauses.append("t.pnl > 0")
+    if pattern_filter:
+        filter_expr = pattern_filter.strip()
+        if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
+            col_part, val_part = filter_expr.split("=", 1)
+            filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
+        if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
+            where_clauses.append(f"p.{filter_expr}")
+        else:
+            where_clauses.append(filter_expr)
+
+    where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    
+    # Map primary column expression
+    prim_resolved = AXIS_ALIASES.get(primary_axis.lower(), primary_axis)
+    if prim_resolved == "prr":
+        prim_expr = "CASE WHEN pr.projected_rr < 2.0 THEN '01. < 2.0 RR' WHEN pr.projected_rr < 3.0 THEN '02. 2.0-3.0 RR' WHEN pr.projected_rr < 4.0 THEN '03. 3.0-4.0 RR' WHEN pr.projected_rr < 5.0 THEN '04. 4.0-5.0 RR' ELSE '05. >= 5.0 RR' END"
+    elif prim_resolved == "duration":
+        prim_expr = "CASE WHEN t.duration_candel = 1 THEN '1 candle' WHEN t.duration_candel = 2 THEN '2 candles' WHEN t.duration_candel BETWEEN 3 AND 5 THEN '3-5 candles' WHEN t.duration_candel BETWEEN 6 AND 15 THEN '6-15 candles' ELSE '16+ candles' END"
+    elif prim_resolved == "loss":
+        prim_expr = "CASE WHEN t.pnl > 0 THEN 'Wins' WHEN ABS(t.pnl) <= 50 THEN '$0-$50' WHEN ABS(t.pnl) <= 100 THEN '$50-$100' ELSE '>$100' END"
+    else:
+        prim_expr = f'p."{prim_resolved}"'
+
+    # Map compare column expression
+    comp_resolved = AXIS_ALIASES.get(compare_axis.lower(), compare_axis)
+    if comp_resolved == "prr":
+        comp_expr = "CASE WHEN pr.projected_rr < 2.0 THEN '<2.0' WHEN pr.projected_rr < 3.0 THEN '2.0-3.0' WHEN pr.projected_rr < 4.0 THEN '3.0-4.0' WHEN pr.projected_rr < 5.0 THEN '4.0-5.0' ELSE '>=5.0' END"
+    elif comp_resolved == "duration":
+        comp_expr = "CASE WHEN t.duration_candel = 1 THEN '1c' WHEN t.duration_candel = 2 THEN '2c' WHEN t.duration_candel BETWEEN 3 AND 5 THEN '3-5c' ELSE '6c+' END"
+    else:
+        comp_expr = f'p."{comp_resolved}"'
+
+    query = f"""
+        SELECT 
+            {prim_expr} AS primary_group,
+            {comp_expr} AS compare_group,
+            COUNT(*) AS trades,
+            COUNT(CASE WHEN t.pnl > 0 THEN 1 END) AS win,
+            ROUND(COUNT(CASE WHEN t.pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 1) AS win_pct,
+            SUM(t.pnl) AS raw_pnl
+        FROM "{view_name}" t
+        JOIN "3candels_patterns" p ON t.uid = p.trade_number
+        LEFT JOIN projected_rr pr ON t.uid = pr.uid
+        {where_str}
+        GROUP BY primary_group, compare_group
+        ORDER BY primary_group, compare_group;
+    """
+    df_comp = con.execute(query).df()
+    con.close()
+
+    if df_comp.empty:
+        print(f"No data for comparison {primary_axis} vs {compare_axis}.")
+        return
+
+    df_comp["cell"] = df_comp.apply(lambda r: f"{int(r['trades'])}t ({r['win_pct']}%)", axis=1)
+    pivot_df = df_comp.pivot(index="primary_group", columns="compare_group", values="cell").fillna("-").reset_index()
+    
+    title_text = f"CROSS-AXIS COMPARISON: '{primary_axis}' vs '{compare_axis}'"
+    totals_str = f"Total Slices: {len(pivot_df)} Primary Groups"
+    print_dataframe(pivot_df, title_text=title_text, totals_str=totals_str, output_fmt=output_fmt)
+
+
 def generate_distribution(
     db_path: str,
     axis: str = "entry_1",
     view_name: str = "trades",
     losses_only: bool = False,
+    wins_only: bool = False,
     pattern_filter: str = None,
     duration_till: int = None,
+    min_trades: int = None,
+    sort: str = None,
+    top: int = None,
+    bottom: int = None,
+    compare: str = None,
     output_fmt: str = "text",
 ):
-    """Unified dispatcher for all distribution axes (pattern, prr, duration, loss, monthly, weekly)."""
+    """Unified dispatcher for all distribution axes and modifiers."""
+    if compare:
+        generate_compare_table(
+            db_path, primary_axis=axis, compare_axis=compare, view_name=view_name,
+            losses_only=losses_only, wins_only=wins_only, pattern_filter=pattern_filter, output_fmt=output_fmt
+        )
+        return
+
     resolved = AXIS_ALIASES.get(str(axis).lower(), axis)
 
     if resolved == "prr":
         generate_projected_rr_table(
-            db_path, view_name=view_name, losses_only=losses_only, pattern_filter=pattern_filter, output_fmt=output_fmt
+            db_path, view_name=view_name, losses_only=losses_only, wins_only=wins_only,
+            pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, top=top, bottom=bottom, output_fmt=output_fmt
         )
     elif resolved == "duration":
         generate_duration_table(
-            db_path, view_name=view_name, duration_till=duration_till, losses_only=losses_only, pattern_filter=pattern_filter, output_fmt=output_fmt
+            db_path, view_name=view_name, duration_till=duration_till, losses_only=losses_only, wins_only=wins_only,
+            pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, top=top, bottom=bottom, output_fmt=output_fmt
         )
     elif resolved == "loss":
         generate_loss_group_table(
@@ -420,7 +551,8 @@ def generate_distribution(
         )
     else:
         generate_distribution_table(
-            db_path, view_name=view_name, pattern_col=resolved, losses_only=losses_only, pattern_filter=pattern_filter, output_fmt=output_fmt
+            db_path, view_name=view_name, pattern_col=resolved, losses_only=losses_only, wins_only=wins_only,
+            pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, top=top, bottom=bottom, output_fmt=output_fmt
         )
 
 
