@@ -1,8 +1,9 @@
 # GEMINI.md - Project Guidelines & Context
 
-## Package Manager & Tooling
+## Package Manager & Tooling & Rules
 - **Default Package Manager:** `uv` is used as the default package/environment manager for this project (`uv run`, `uv add`, `uv sync`, etc.).
 - **External CLI Tools Reference:** Always read [`Utils/tools-info.md`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/tools-info.md) to discover, inspect, and understand the list of available project CLI tools, their flag contracts, and operational guidelines.
+- **Suo-Moto Artifacts Policy:** Do NOT create any suo-moto artifacts or Markdown (`.md`) files unless explicitly requested by the user. Ask for permission first if you feel the need to create one.
 
 ---
 
