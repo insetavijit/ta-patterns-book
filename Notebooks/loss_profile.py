@@ -373,6 +373,81 @@ def generate_loss_group_table(db_path: str, view_name: str = "trades"):
     print(f" TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}")
     print("="*85 + "\n")
 
+def generate_distribution_table(db_path: str, view_name: str = "trades", pattern_col: str = "entry_1", losses_only: bool = False):
+    con = duckdb.connect(db_path, read_only=True)
+    
+    # Check if target pattern column exists or if we need to JOIN "3candels_patterns"
+    cols_df = con.execute(f'SELECT * FROM "{view_name}" LIMIT 0;').df()
+    
+    has_pattern_col = pattern_col in cols_df.columns
+    
+    where_extra = "WHERE t.pnl <= 0" if losses_only else ""
+
+    if has_pattern_col:
+        query = f"""
+            SELECT 
+                "{pattern_col}" AS pattern,
+                COUNT(*) AS "number of trades",
+                COUNT(CASE WHEN pnl > 0 THEN 1 END) AS win,
+                COUNT(CASE WHEN pnl <= 0 THEN 1 END) AS loss,
+                ROUND(COUNT(CASE WHEN pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 2) AS "win%",
+                SUM(pnl) AS raw_pnl
+            FROM "{view_name}" t
+            {where_extra}
+            GROUP BY "{pattern_col}"
+            ORDER BY "number of trades" DESC, "win%" DESC;
+        """
+    else:
+        # Try joining "3candels_patterns" table/view
+        query = f"""
+            SELECT 
+                p."{pattern_col}" AS pattern,
+                COUNT(*) AS "number of trades",
+                COUNT(CASE WHEN t.pnl > 0 THEN 1 END) AS win,
+                COUNT(CASE WHEN t.pnl <= 0 THEN 1 END) AS loss,
+                ROUND(COUNT(CASE WHEN t.pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 2) AS "win%",
+                SUM(t.pnl) AS raw_pnl
+            FROM "{view_name}" t
+            JOIN "3candels_patterns" p ON t.trade_id = p.trade_id
+            {where_extra}
+            GROUP BY p."{pattern_col}"
+            ORDER BY "number of trades" DESC, "win%" DESC;
+        """
+    
+    df_dist = con.execute(query).df()
+    con.close()
+
+    if df_dist.empty:
+        print(f"No trades found for pattern column '{pattern_col}'.")
+        return
+
+    df_dist["ammount ( sum )"] = df_dist["raw_pnl"].apply(
+        lambda x: f"+${x:,.2f}" if x >= 0 else f"-${abs(x):,.2f}"
+    )
+
+    display_df = df_dist[["pattern", "number of trades", "win", "loss", "win%", "ammount ( sum )"]].copy()
+
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.width", 1000)
+    pd.set_option("display.max_rows", 200)
+
+    title_suffix = " [LOSSES ONLY]" if losses_only else ""
+    print("\n" + "="*85)
+    print(f" PATTERN PERFORMANCE DISTRIBUTION FOR '{pattern_col}'{title_suffix} (View: {view_name})")
+    print("="*85)
+    print(display_df.to_string(index=False))
+    print("="*85)
+
+    tot_trades = display_df["number of trades"].sum()
+    tot_win = display_df["win"].sum()
+    tot_loss = display_df["loss"].sum()
+    tot_win_pct = round(tot_win / tot_trades * 100.0, 2) if tot_trades > 0 else 0.0
+    tot_pnl = df_dist["raw_pnl"].sum()
+    tot_pnl_str = f"+${tot_pnl:,.2f}" if tot_pnl >= 0 else f"-${abs(tot_pnl):,.2f}"
+
+    print(f" TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}")
+    print("="*85 + "\n")
+
 def generate_loss_profile(db_path: str, view_name: str = "trades"):
     if not os.path.exists(db_path):
         raise FileNotFoundError(f"DuckDB database file not found at '{db_path}'")
@@ -392,13 +467,16 @@ def main():
     parser.add_argument("--duration-group", "--duration", "--dur", action="store_true", help="Display duration bracket performance breakdown table")
     parser.add_argument("--duration-till", type=int, default=None, help="Limit duration table output up to specified candle duration (e.g. 5)")
     parser.add_argument("--loss-group", "--loss-grp", action="store_true", help="Display loss amount bracket performance breakdown table")
-    parser.add_argument("--losses-only", action="store_true", help="Filter duration breakdown to show losses only (pnl <= 0)")
+    parser.add_argument("--distribution", "--dist", nargs="?", const="entry_1", type=str, default=None, help="Display pattern performance distribution for specified column (default: entry_1)")
+    parser.add_argument("--losses-only", action="store_true", help="Filter breakdown to show losses only (pnl <= 0)")
     parser.add_argument("--loss", nargs="?", const=12, type=int, default=None, help="Show head of losing trades table & render Trade Playbook (default limit: 12)")
 
     args = parser.parse_args()
     db_path = args.db if args.db else get_duckdb_path()
 
-    if args.loss_group:
+    if args.distribution is not None:
+        generate_distribution_table(db_path, view_name=args.view, pattern_col=args.distribution, losses_only=args.losses_only)
+    elif args.loss_group:
         generate_loss_group_table(db_path, view_name=args.view)
     elif args.duration_group or args.duration_till is not None or args.losses_only:
         generate_duration_table(db_path, view_name=args.view, duration_till=args.duration_till, losses_only=args.losses_only)
@@ -411,3 +489,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
