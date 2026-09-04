@@ -414,7 +414,7 @@ def generate_distribution_table(
                 ROUND(COUNT(CASE WHEN t.pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 2) AS "win%",
                 SUM(t.pnl) AS raw_pnl
             FROM "{view_name}" t
-            JOIN "3candels_patterns" p ON t.trade_id = p.trade_id
+            JOIN "3candels_patterns" p ON t.uid = p.trade_number
             {where_str}
             GROUP BY p."{pattern_col}"
             ORDER BY "number of trades" DESC, "win%" DESC;

@@ -51,9 +51,9 @@ def compute_3candel_patterns(show_distribution: bool = False):
     print(f"[+] Connecting to DuckDB: {DB_PATH}")
     conn = duckdb.connect(str(DB_PATH), read_only=False)
 
-    # 1. Fetch trades (trade_id, entry_time)
+    # 1. Fetch trades (uid AS trade_number, entry_time)
     trades_df = conn.execute(
-        "SELECT trade_id, entry_time FROM trades ORDER BY trade_id;"
+        "SELECT uid AS trade_number, entry_time FROM trades ORDER BY uid;"
     ).fetchdf()
 
     # 2. Fetch ohlcv (timestamp, open, close)
@@ -75,7 +75,7 @@ def compute_3candel_patterns(show_distribution: bool = False):
     results = []
 
     for _, row in trades_df.iterrows():
-        t_id = int(row["trade_id"])
+        t_num = int(row["trade_number"])
         entry_ts = pd.to_datetime(row["entry_time"])
         if entry_ts.tzinfo is not None:
             entry_ts_val = entry_ts.tz_localize(None).to_datetime64()
@@ -112,7 +112,7 @@ def compute_3candel_patterns(show_distribution: bool = False):
 
         results.append(
             {
-                "trade_id": t_id,
+                "trade_number": t_num,
                 "entry_1": entry_1_code,
                 "entry_2": entry_2_code,
                 "entry_3": entry_3_code,
@@ -120,14 +120,14 @@ def compute_3candel_patterns(show_distribution: bool = False):
             }
         )
 
-    res_df = pd.DataFrame(results).drop_duplicates(subset=["trade_id"])
+    res_df = pd.DataFrame(results).drop_duplicates(subset=["trade_number"])
 
     # Write table "3candels_patterns" into DuckDB
     conn.execute('DROP TABLE IF EXISTS "3candels_patterns";')
     conn.execute(
         """
         CREATE TABLE "3candels_patterns" (
-            trade_id BIGINT PRIMARY KEY,
+            trade_number BIGINT PRIMARY KEY,
             entry_1 VARCHAR,
             entry_2 VARCHAR,
             entry_3 VARCHAR,
@@ -137,7 +137,7 @@ def compute_3candel_patterns(show_distribution: bool = False):
     )
     conn.register("res_df_view", res_df)
     conn.execute(
-        'INSERT INTO "3candels_patterns" SELECT trade_id, entry_1, entry_2, entry_3, entry_4 FROM res_df_view;'
+        'INSERT INTO "3candels_patterns" SELECT trade_number, entry_1, entry_2, entry_3, entry_4 FROM res_df_view;'
     )
     conn.unregister("res_df_view")
 
@@ -145,7 +145,7 @@ def compute_3candel_patterns(show_distribution: bool = False):
     conn.execute(
         """
         CREATE OR REPLACE VIEW "3candels_patterns_view" AS 
-        SELECT trade_id, entry_1, entry_2, entry_3, entry_4 
+        SELECT trade_number, entry_1, entry_2, entry_3, entry_4 
         FROM "3candels_patterns";
     """
     )
@@ -155,7 +155,7 @@ def compute_3candel_patterns(show_distribution: bool = False):
     print(f'[+] Successfully updated table `"3candels_patterns"` and view `"3candels_patterns_view"` in {DB_PATH}')
     print(f"[+] Summary: Processed {total_trades} trades across 4 entry pattern variants.")
 
-    sample = conn.execute('SELECT * FROM "3candels_patterns" ORDER BY trade_id ASC LIMIT 5;').fetchdf()
+    sample = conn.execute('SELECT * FROM "3candels_patterns" ORDER BY trade_number ASC LIMIT 5;').fetchdf()
     print("\nSample Preview:")
     print(sample.to_string(index=False))
 
@@ -173,7 +173,7 @@ def compute_3candel_patterns(show_distribution: bool = False):
                 ROUND(SUM(CASE WHEN t.pnl > 0 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS win_rate_pct,
                 ROUND(SUM(t.pnl), 2) AS net_pnl
             FROM trades t
-            JOIN "3candels_patterns" p ON t.trade_id = p.trade_id
+            JOIN "3candels_patterns" p ON t.uid = p.trade_number
             GROUP BY p.{col}
             ORDER BY total_trades DESC, win_rate_pct DESC
             LIMIT 15;
