@@ -13,10 +13,11 @@
 1. **Loss Profiler CLI (`loss-profile`)**:
    - **Location**: [`Core/ta_patterns_book/loss_profile/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/ta_patterns_book/loss_profile/)
    - **CLI Commands**:
-     - `uv run loss-profile --distribution entry_1`: 3-candle setup pattern win/loss performance distribution.
-     - `uv run loss-profile --distribution entry_2 --filter "entry_1 = DR-DR-DR"`: Nested pattern filter distribution.
-     - `uv run loss-profile --duration-group --filter "entry_1 = DR-DR-DR"`: Candle duration breakdown for specific pattern filter.
-     - `uv run loss-profile -prr --filter "entry_1 = DR-DR-DR"`: Projected R:R bracket breakdown.
+     - `uv run loss-profile --dist entry_1`: 3-candle setup pattern win/loss performance distribution.
+     - `uv run loss-profile --dist entry_2 --filter "entry_1 = DR-DR-DR"`: Nested pattern filter distribution.
+     - `uv run loss-profile --dist duration --filter "entry_1 = DR-DR-DR"`: Candle duration breakdown for specific pattern filter.
+     - `uv run loss-profile --dist prr --filter "entry_1 = DR-DR-DR"`: Projected R:R bracket breakdown.
+     - `uv run loss-profile --dist loss`: Dollar loss amount severity breakdown.
      - `uv run loss-profile --output markdown`: Render markdown tables.
    - **Architecture**:
      - `sql.py`: Pure SQL query builders (`build_distribution_query`, `build_duration_query`, etc.).

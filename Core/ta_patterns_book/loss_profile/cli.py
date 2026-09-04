@@ -3,6 +3,7 @@
 import argparse
 from .db import get_duckdb_path
 from .reporters import (
+    generate_distribution,
     generate_distribution_table,
     generate_duration_table,
     generate_head_table,
@@ -18,13 +19,13 @@ def main():
     parser = argparse.ArgumentParser(description="Strategy Loss Profiler, Monthly, Weekly & Duration Performance Reporter")
     parser.add_argument("--db", type=str, default=None, help="Path to DuckDB database file")
     parser.add_argument("--view", type=str, default="trades", help="Source view/table (default: trades)")
-    parser.add_argument("--monthly", "--month", "--mnth", nargs="?", const="all", type=str, default=None, help="Display monthly performance breakdown")
-    parser.add_argument("--weekly", "--wk", action="store_true", help="Display weekly performance breakdown table")
-    parser.add_argument("--duration-group", "--dur-group", action="store_true", help="Display duration bracket performance breakdown table")
+    parser.add_argument("--monthly", "--month", "--mnth", nargs="?", const="all", type=str, default=None, help="Display monthly performance breakdown (Deprecated: use --dist monthly)")
+    parser.add_argument("--weekly", "--wk", action="store_true", help="Display weekly performance breakdown table (Deprecated: use --dist weekly)")
+    parser.add_argument("--duration-group", "--dur-group", action="store_true", help="Display duration bracket performance breakdown table (Deprecated: use --dist duration)")
     parser.add_argument("--duration-till", type=int, default=None, help="Limit duration table output up to specified candle duration (e.g. 5)")
-    parser.add_argument("--loss-group", "--loss-grp", action="store_true", help="Display loss amount bracket performance breakdown table")
-    parser.add_argument("--projected-rr", "--projected_rr", "-prr", action="store_true", help="Display projected R:R bracket performance breakdown table")
-    parser.add_argument("--distribution", "--dist", nargs="?", const="entry_1", type=str, default=None, help="Display pattern performance distribution for specified column (default: entry_1)")
+    parser.add_argument("--loss-group", "--loss-grp", action="store_true", help="Display loss amount bracket performance breakdown table (Deprecated: use --dist loss)")
+    parser.add_argument("--projected-rr", "--projected_rr", "-prr", action="store_true", help="Display projected R:R bracket performance breakdown table (Deprecated: use --dist prr)")
+    parser.add_argument("--distribution", "--dist", nargs="?", const="entry_1", type=str, default=None, help="Display performance distribution for specified axis (e.g. entry_1, prr, duration, loss, monthly, weekly)")
     parser.add_argument("--head", "--trades", nargs="?", const=10, type=int, default=None, help="Display matching trade rows head (default limit: 10)")
     parser.add_argument("--duration", "--dur", type=int, default=None, help="Exact candle duration filter (e.g. 1)")
     parser.add_argument("--pattern-filter", "--filter", type=str, default=None, help="Filter trades by pattern expression (e.g. entry_1=DR-DR-DR)")
@@ -48,32 +49,36 @@ def main():
             output_fmt=output_fmt,
         )
     elif args.distribution is not None:
-        generate_distribution_table(
+        generate_distribution(
             db_path,
+            axis=args.distribution,
             view_name=args.view,
-            pattern_col=args.distribution,
             losses_only=args.losses_only,
             pattern_filter=args.pattern_filter,
+            duration_till=args.duration_till,
             output_fmt=output_fmt,
         )
     elif args.projected_rr:
-        generate_projected_rr_table(
+        generate_distribution(
             db_path,
+            axis="prr",
             view_name=args.view,
             losses_only=args.losses_only,
             pattern_filter=args.pattern_filter,
             output_fmt=output_fmt,
         )
     elif args.loss_group:
-        generate_loss_group_table(
+        generate_distribution(
             db_path,
+            axis="loss",
             view_name=args.view,
             pattern_filter=args.pattern_filter,
             output_fmt=output_fmt,
         )
     elif args.duration_group or args.duration_till is not None or args.duration is not None:
-        generate_duration_table(
+        generate_distribution(
             db_path,
+            axis="duration",
             view_name=args.view,
             duration_till=args.duration_till,
             losses_only=args.losses_only,

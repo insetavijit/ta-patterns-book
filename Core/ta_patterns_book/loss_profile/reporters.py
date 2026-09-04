@@ -377,6 +377,53 @@ def generate_distribution_table(
     print_dataframe(display_df, title_text=title_text, totals_str=totals_str, output_fmt=output_fmt)
 
 
+AXIS_ALIASES = {
+    "prr": "prr", "rr": "prr", "projected_rr": "prr",
+    "duration": "duration", "dur": "duration", "candles": "duration",
+    "loss": "loss", "pnl": "loss", "loss_group": "loss",
+    "monthly": "monthly", "month": "monthly", "mnth": "monthly",
+    "weekly": "weekly", "week": "weekly", "wk": "weekly",
+}
+
+
+def generate_distribution(
+    db_path: str,
+    axis: str = "entry_1",
+    view_name: str = "trades",
+    losses_only: bool = False,
+    pattern_filter: str = None,
+    duration_till: int = None,
+    output_fmt: str = "text",
+):
+    """Unified dispatcher for all distribution axes (pattern, prr, duration, loss, monthly, weekly)."""
+    resolved = AXIS_ALIASES.get(str(axis).lower(), axis)
+
+    if resolved == "prr":
+        generate_projected_rr_table(
+            db_path, view_name=view_name, losses_only=losses_only, pattern_filter=pattern_filter, output_fmt=output_fmt
+        )
+    elif resolved == "duration":
+        generate_duration_table(
+            db_path, view_name=view_name, duration_till=duration_till, losses_only=losses_only, pattern_filter=pattern_filter, output_fmt=output_fmt
+        )
+    elif resolved == "loss":
+        generate_loss_group_table(
+            db_path, view_name=view_name, pattern_filter=pattern_filter, output_fmt=output_fmt
+        )
+    elif resolved == "monthly":
+        generate_monthly_table(
+            db_path, view_name=view_name, output_fmt=output_fmt
+        )
+    elif resolved == "weekly":
+        generate_weekly_table(
+            db_path, view_name=view_name, output_fmt=output_fmt
+        )
+    else:
+        generate_distribution_table(
+            db_path, view_name=view_name, pattern_col=resolved, losses_only=losses_only, pattern_filter=pattern_filter, output_fmt=output_fmt
+        )
+
+
 def generate_head_table(
     db_path: str,
     view_name: str = "trades",
