@@ -228,7 +228,7 @@ def generate_weekly_table(db_path: str, view_name: str = "trades"):
     print(f" TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}")
     print("="*85 + "\n")
 
-def generate_duration_table(db_path: str, view_name: str = "trades"):
+def generate_duration_table(db_path: str, view_name: str = "trades", duration_till: int = None):
     con = duckdb.connect(db_path, read_only=True)
     query = f"""
         SELECT 
@@ -249,7 +249,8 @@ def generate_duration_table(db_path: str, view_name: str = "trades"):
             COUNT(CASE WHEN pnl <= 0 THEN 1 END) AS loss,
             ROUND(COUNT(CASE WHEN pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 2) AS "win%",
             SUM(pnl) AS raw_pnl,
-            MIN(duration_candel) AS min_dur
+            MIN(duration_candel) AS min_dur,
+            MAX(duration_candel) AS max_dur
         FROM "{view_name}"
         GROUP BY duration_bracket
         ORDER BY min_dur ASC;
@@ -261,6 +262,18 @@ def generate_duration_table(db_path: str, view_name: str = "trades"):
         print("No trades found for duration breakdown.")
         return
 
+    # Calculate overall full totals before any filtering
+    tot_trades_full = df_dur["number of trades"].sum()
+    tot_win_full = df_dur["win"].sum()
+    tot_loss_full = df_dur["loss"].sum()
+    tot_win_pct_full = round(tot_win_full / tot_trades_full * 100.0, 2) if tot_trades_full > 0 else 0.0
+    tot_pnl_full = df_dur["raw_pnl"].sum()
+    tot_pnl_str_full = f"+${tot_pnl_full:,.2f}" if tot_pnl_full >= 0 else f"-${abs(tot_pnl_full):,.2f}"
+
+    # Filter rows if duration_till is specified
+    if duration_till is not None:
+        df_dur = df_dur[df_dur["min_dur"] <= duration_till].copy()
+
     df_dur["ammount ( sum )"] = df_dur["raw_pnl"].apply(
         lambda x: f"+${x:,.2f}" if x >= 0 else f"-${abs(x):,.2f}"
     )
@@ -270,20 +283,25 @@ def generate_duration_table(db_path: str, view_name: str = "trades"):
     pd.set_option("display.max_columns", None)
     pd.set_option("display.width", 1000)
 
+    title_suffix = f" (TILL DURATION <= {duration_till})" if duration_till is not None else ""
     print("\n" + "="*85)
-    print(" DURATION BRACKET STRATEGY PERFORMANCE BREAKDOWN")
+    print(f" DURATION BRACKET STRATEGY PERFORMANCE BREAKDOWN{title_suffix}")
     print("="*85)
     print(display_df.to_string(index=False))
     print("="*85)
 
-    tot_trades = display_df["number of trades"].sum()
-    tot_win = display_df["win"].sum()
-    tot_loss = display_df["loss"].sum()
-    tot_win_pct = round(tot_win / tot_trades * 100.0, 2) if tot_trades > 0 else 0.0
-    tot_pnl = df_dur["raw_pnl"].sum()
-    tot_pnl_str = f"+${tot_pnl:,.2f}" if tot_pnl >= 0 else f"-${abs(tot_pnl):,.2f}"
+    if duration_till is not None:
+        tot_trades_till = display_df["number of trades"].sum()
+        tot_win_till = display_df["win"].sum()
+        tot_loss_till = display_df["loss"].sum()
+        tot_win_pct_till = round(tot_win_till / tot_trades_till * 100.0, 2) if tot_trades_till > 0 else 0.0
+        tot_pnl_till = df_dur["raw_pnl"].sum()
+        tot_pnl_str_till = f"+${tot_pnl_till:,.2f}" if tot_pnl_till >= 0 else f"-${abs(tot_pnl_till):,.2f}"
 
-    print(f" TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}")
+        print(f" TOTALS (FULL)    : {tot_trades_full:,} Trades | {tot_win_full:,} Wins | {tot_loss_full:,} Losses | Win%: {tot_win_pct_full:.2f}% | Net PnL: {tot_pnl_str_full}")
+        print(f" TOTALS (TILL <={duration_till}) : {tot_trades_till:,} Trades | {tot_win_till:,} Wins | {tot_loss_till:,} Losses | Win%: {tot_win_pct_till:.2f}% | Net PnL: {tot_pnl_str_till}")
+    else:
+        print(f" TOTALS : {tot_trades_full:,} Trades | {tot_win_full:,} Wins | {tot_loss_full:,} Losses | Win%: {tot_win_pct_full:.2f}% | Net PnL: {tot_pnl_str_full}")
     print("="*85 + "\n")
 
 def generate_loss_profile(db_path: str, view_name: str = "trades"):
@@ -303,13 +321,14 @@ def main():
     parser.add_argument("--monthly", "--month", "--mnth", nargs="?", const="all", type=str, default=None, help="Display monthly performance breakdown")
     parser.add_argument("--weekly", "--wk", action="store_true", help="Display weekly performance breakdown table")
     parser.add_argument("--duration-group", "--duration", "--dur", action="store_true", help="Display duration bracket performance breakdown table")
+    parser.add_argument("--duration-till", type=int, default=None, help="Limit duration table output up to specified candle duration (e.g. 5)")
     parser.add_argument("--loss", nargs="?", const=12, type=int, default=None, help="Show head of losing trades table & render Trade Playbook (default limit: 12)")
 
     args = parser.parse_args()
     db_path = args.db if args.db else get_duckdb_path()
 
-    if args.duration_group:
-        generate_duration_table(db_path, view_name=args.view)
+    if args.duration_group or args.duration_till is not None:
+        generate_duration_table(db_path, view_name=args.view, duration_till=args.duration_till)
     elif args.weekly:
         generate_weekly_table(db_path, view_name=args.view)
     elif args.monthly is not None or args.loss is not None:
