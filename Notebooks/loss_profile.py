@@ -228,8 +228,11 @@ def generate_weekly_table(db_path: str, view_name: str = "trades"):
     print(f" TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}")
     print("="*85 + "\n")
 
-def generate_duration_table(db_path: str, view_name: str = "trades", duration_till: int = None):
+def generate_duration_table(db_path: str, view_name: str = "trades", duration_till: int = None, losses_only: bool = False):
     con = duckdb.connect(db_path, read_only=True)
+    
+    where_extra = "WHERE pnl <= 0" if losses_only else ""
+
     query = f"""
         SELECT 
             CASE 
@@ -252,6 +255,7 @@ def generate_duration_table(db_path: str, view_name: str = "trades", duration_ti
             MIN(duration_candel) AS min_dur,
             MAX(duration_candel) AS max_dur
         FROM "{view_name}"
+        {where_extra}
         GROUP BY duration_bracket
         ORDER BY min_dur ASC;
     """
@@ -283,7 +287,12 @@ def generate_duration_table(db_path: str, view_name: str = "trades", duration_ti
     pd.set_option("display.max_columns", None)
     pd.set_option("display.width", 1000)
 
-    title_suffix = f" (TILL DURATION <= {duration_till})" if duration_till is not None else ""
+    title_suffix = ""
+    if losses_only:
+        title_suffix += " [LOSSES ONLY]"
+    if duration_till is not None:
+        title_suffix += f" (TILL DURATION <= {duration_till})"
+        
     print("\n" + "="*85)
     print(f" DURATION BRACKET STRATEGY PERFORMANCE BREAKDOWN{title_suffix}")
     print("="*85)
@@ -322,13 +331,14 @@ def main():
     parser.add_argument("--weekly", "--wk", action="store_true", help="Display weekly performance breakdown table")
     parser.add_argument("--duration-group", "--duration", "--dur", action="store_true", help="Display duration bracket performance breakdown table")
     parser.add_argument("--duration-till", type=int, default=None, help="Limit duration table output up to specified candle duration (e.g. 5)")
+    parser.add_argument("--losses-only", action="store_true", help="Filter duration breakdown to show losses only (pnl <= 0)")
     parser.add_argument("--loss", nargs="?", const=12, type=int, default=None, help="Show head of losing trades table & render Trade Playbook (default limit: 12)")
 
     args = parser.parse_args()
     db_path = args.db if args.db else get_duckdb_path()
 
-    if args.duration_group or args.duration_till is not None:
-        generate_duration_table(db_path, view_name=args.view, duration_till=args.duration_till)
+    if args.duration_group or args.duration_till is not None or args.losses_only:
+        generate_duration_table(db_path, view_name=args.view, duration_till=args.duration_till, losses_only=args.losses_only)
     elif args.weekly:
         generate_weekly_table(db_path, view_name=args.view)
     elif args.monthly is not None or args.loss is not None:
