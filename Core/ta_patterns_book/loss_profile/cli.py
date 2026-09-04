@@ -2,11 +2,14 @@
 
 import argparse
 from .db import get_duckdb_path
-from .distribution import generate_distribution_table, generate_loss_profile
-from .duration import generate_duration_table
-from .loss_group import generate_loss_group_table
-from .monthly import generate_monthly_table
-from .weekly import generate_weekly_table
+from .reporters import (
+    generate_distribution_table,
+    generate_duration_table,
+    generate_loss_group_table,
+    generate_loss_profile,
+    generate_monthly_table,
+    generate_weekly_table,
+)
 
 
 def main():
