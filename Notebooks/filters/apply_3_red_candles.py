@@ -3,7 +3,7 @@
 
 Evaluates the 3-red-candles filter (3 consecutive red candles ending at or prior to trade entry)
 for all trades in Shared/Data/eur_usd_trades_5m.duckdb.
-Creates/replaces the table `filter_3_red_candles` with columns: (uid BIGINT, filter_3_red_candles BOOLEAN).
+Creates/replaces the table `3_red_candels` with columns: (uid BIGINT PRIMARY KEY, "3_red_candels" BOOLEAN).
 """
 
 from pathlib import Path
@@ -66,32 +66,32 @@ def compute_3_red_candles_filter():
         else:
             three_red = False
 
-        results.append({"uid": uid, "filter_3_red_candles": three_red})
+        results.append({"uid": uid, "3_red_candels": three_red})
 
     res_df = pd.DataFrame(results)
 
-    # Write table filter_3_red_candles into DuckDB
-    conn.execute("DROP TABLE IF EXISTS filter_3_red_candles;")
+    # Write table "3_red_candels" into DuckDB
+    conn.execute('DROP TABLE IF EXISTS "3_red_candels";')
     conn.execute(
         """
-        CREATE TABLE filter_3_red_candles (
+        CREATE TABLE "3_red_candels" (
             uid BIGINT PRIMARY KEY,
-            filter_3_red_candles BOOLEAN
+            "3_red_candels" BOOLEAN
         );
     """
     )
     conn.register("res_df_view", res_df)
     conn.execute(
-        "INSERT INTO filter_3_red_candles SELECT uid, filter_3_red_candles FROM res_df_view;"
+        'INSERT INTO "3_red_candels" SELECT uid, "3_red_candels" FROM res_df_view;'
     )
     conn.unregister("res_df_view")
 
-    count_true = res_df["filter_3_red_candles"].sum()
+    count_true = res_df["3_red_candels"].sum()
     total_trades = len(res_df)
 
     conn.close()
 
-    print(f"[+] Successfully created table `filter_3_red_candles` in {DB_PATH}")
+    print(f'[+] Successfully created table `"3_red_candels"` in {DB_PATH}')
     print(f"[+] Summary: {count_true} / {total_trades} trades matched the 3-red-candles filter ({count_true / total_trades * 100:.2f}%).")
 
 
