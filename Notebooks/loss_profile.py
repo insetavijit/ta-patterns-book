@@ -113,7 +113,8 @@ def generate_monthly_table(db_path: str, view_name: str = "trades", month_filter
         deps = _load_tradebook_deps()
         ohlcv_cols = build_ohlcv_column_map("timestamp", "open", "high", "low", "close", "volume")
         
-        sql_query = f'SELECT uid AS trade_id, entry_time, entry_price, sl_price, tp_price, exit_price, exit_reason, pnl FROM "{view_name}" {where_cond} ORDER BY entry_time ASC LIMIT {show_loss_head}'
+        id_col = "trade_id" if "trade_id" in df_loss_head.columns else "uid AS trade_id"
+        sql_query = f'SELECT {id_col}, entry_time, entry_price, sl_price, tp_price, exit_price, exit_reason, pnl FROM "{view_name}" {where_cond} ORDER BY entry_time ASC LIMIT {show_loss_head}'
         
         generate_trade_book(
             deps=deps,
@@ -313,6 +314,65 @@ def generate_duration_table(db_path: str, view_name: str = "trades", duration_ti
         print(f" TOTALS : {tot_trades_full:,} Trades | {tot_win_full:,} Wins | {tot_loss_full:,} Losses | Win%: {tot_win_pct_full:.2f}% | Net PnL: {tot_pnl_str_full}")
     print("="*85 + "\n")
 
+def generate_loss_group_table(db_path: str, view_name: str = "trades"):
+    con = duckdb.connect(db_path, read_only=True)
+    query = f"""
+        SELECT 
+            CASE 
+                WHEN pnl > 0 THEN '01. Wins (PnL > $0)'
+                WHEN ABS(pnl) <= 50 THEN '02. Small Loss ($0 - $50)'
+                WHEN ABS(pnl) > 50 AND ABS(pnl) <= 100 THEN '03. Medium Loss ($50 - $100)'
+                WHEN ABS(pnl) > 100 AND ABS(pnl) <= 200 THEN '04. Large Loss ($100 - $200)'
+                ELSE '05. Severe Loss (> $200)'
+            END AS loss_bracket,
+            COUNT(*) AS "number of trades",
+            COUNT(CASE WHEN pnl > 0 THEN 1 END) AS win,
+            COUNT(CASE WHEN pnl <= 0 THEN 1 END) AS loss,
+            ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM "{view_name}"), 2) AS "pct_of_total_trades%",
+            SUM(pnl) AS raw_pnl,
+            MIN(CASE 
+                WHEN pnl > 0 THEN 1
+                WHEN ABS(pnl) <= 50 THEN 2
+                WHEN ABS(pnl) > 50 AND ABS(pnl) <= 100 THEN 3
+                WHEN ABS(pnl) > 100 AND ABS(pnl) <= 200 THEN 4
+                ELSE 5
+            END) AS sort_order
+        FROM "{view_name}"
+        GROUP BY loss_bracket
+        ORDER BY sort_order ASC;
+    """
+    df_loss_grp = con.execute(query).df()
+    con.close()
+
+    if df_loss_grp.empty:
+        print("No trades found for loss grouping.")
+        return
+
+    df_loss_grp["ammount ( sum )"] = df_loss_grp["raw_pnl"].apply(
+        lambda x: f"+${x:,.2f}" if x >= 0 else f"-${abs(x):,.2f}"
+    )
+
+    display_df = df_loss_grp[["loss_bracket", "number of trades", "win", "loss", "pct_of_total_trades%", "ammount ( sum )"]].copy()
+
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.width", 1000)
+
+    print("\n" + "="*85)
+    print(" LOSS AMOUNT BRACKET STRATEGY PERFORMANCE BREAKDOWN")
+    print("="*85)
+    print(display_df.to_string(index=False))
+    print("="*85)
+
+    tot_trades = display_df["number of trades"].sum()
+    tot_win = display_df["win"].sum()
+    tot_loss = display_df["loss"].sum()
+    tot_win_pct = round(tot_win / tot_trades * 100.0, 2) if tot_trades > 0 else 0.0
+    tot_pnl = df_loss_grp["raw_pnl"].sum()
+    tot_pnl_str = f"+${tot_pnl:,.2f}" if tot_pnl >= 0 else f"-${abs(tot_pnl):,.2f}"
+
+    print(f" TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}")
+    print("="*85 + "\n")
+
 def generate_loss_profile(db_path: str, view_name: str = "trades"):
     if not os.path.exists(db_path):
         raise FileNotFoundError(f"DuckDB database file not found at '{db_path}'")
@@ -331,13 +391,16 @@ def main():
     parser.add_argument("--weekly", "--wk", action="store_true", help="Display weekly performance breakdown table")
     parser.add_argument("--duration-group", "--duration", "--dur", action="store_true", help="Display duration bracket performance breakdown table")
     parser.add_argument("--duration-till", type=int, default=None, help="Limit duration table output up to specified candle duration (e.g. 5)")
+    parser.add_argument("--loss-group", "--loss-grp", action="store_true", help="Display loss amount bracket performance breakdown table")
     parser.add_argument("--losses-only", action="store_true", help="Filter duration breakdown to show losses only (pnl <= 0)")
     parser.add_argument("--loss", nargs="?", const=12, type=int, default=None, help="Show head of losing trades table & render Trade Playbook (default limit: 12)")
 
     args = parser.parse_args()
     db_path = args.db if args.db else get_duckdb_path()
 
-    if args.duration_group or args.duration_till is not None or args.losses_only:
+    if args.loss_group:
+        generate_loss_group_table(db_path, view_name=args.view)
+    elif args.duration_group or args.duration_till is not None or args.losses_only:
         generate_duration_table(db_path, view_name=args.view, duration_till=args.duration_till, losses_only=args.losses_only)
     elif args.weekly:
         generate_weekly_table(db_path, view_name=args.view)
