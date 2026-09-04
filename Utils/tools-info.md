@@ -11,6 +11,7 @@ This document serves as the authoritative guide for AI coding agents (Gemini, An
 
 | Tool Name | Executable Path | Spec / Manual | Primary Purpose | Default Execution |
 | :--- | :--- | :--- | :--- | :--- |
+| **Loss Profiler Package** *(Core)* | [`Core/ta_patterns_book/loss_profile/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/ta_patterns_book/loss_profile/) | `uv run loss-profile --help` | Strategy loss profiler, monthly, weekly, duration, & pattern distribution reporter. | `uv run loss-profile` |
 | **DuckDB Explorer CLI** | [`Utils/duckdb-explorar-tool/duckdb_explorer.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/duckdb-explorar-tool/duckdb_explorer.py) | [`utils.yaml`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/duckdb-explorar-tool/utils.yaml) | Read-only inspection, SQL querying, column profiling, Pandas transformations, & exporting. | `uv run python Utils/duckdb-explorar-tool/duckdb_explorer.py` |
 | **TradeBook Charts Package** *(Core)* | [`Core/trade_book_charts/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/trade_book_charts/) | `uv run trade-book-charts describe --pretty` | SmartGrid chart packing, trade playbook PNG generation, & layout engine. | `uv run trade-book-charts` |
 
