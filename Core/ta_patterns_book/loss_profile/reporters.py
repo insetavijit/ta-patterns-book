@@ -1,12 +1,50 @@
-"""Reporters module for monthly, weekly, duration, loss group, and distribution breakdowns."""
-
 import os
 import duckdb
 import pandas as pd
+from rich.console import Console
+from rich.table import Table
 from trade_book_charts import generate_trade_book
 from trade_book_charts.db import _load_tradebook_deps, build_ohlcv_column_map
 
-from .db import get_db_connection, get_outs_dir
+from .db import get_db_connection, get_outs_dir, load_config
+
+
+def print_dataframe(df: pd.DataFrame, title_text: str = None, totals_str: str = None, output_fmt: str = "text"):
+    """Prints DataFrame using rich borderless tables (based on cnf.yaml display config) or markdown."""
+    config = load_config()
+    display_cfg = config.get("display", {})
+    table_cfg = display_cfg.get("table", {})
+    
+    if output_fmt == "markdown":
+        if title_text:
+            print(f"### {title_text}\n")
+        print(df.to_markdown(index=False))
+        if totals_str:
+            print(f"\n{totals_str}\n")
+    else:
+        console = Console()
+        rich_table = Table(
+            box=None,
+            show_header=table_cfg.get("show_header", True),
+            header_style=table_cfg.get("header_style", "bold cyan"),
+            show_edge=table_cfg.get("show_edge", False),
+            pad_edge=table_cfg.get("pad_edge", False),
+        )
+
+        for col in df.columns:
+            # Right-align numeric columns
+            justify = "right" if pd.api.types.is_numeric_dtype(df[col]) or col in ["win%", "number of trades", "win", "loss"] else "left"
+            rich_table.add_column(str(col), justify=justify)
+
+        for _, row in df.iterrows():
+            rich_table.add_row(*[str(val) for val in row.values])
+
+        if title_text:
+            console.print(f"\n[bold yellow]{title_text}[/bold yellow]")
+        console.print(rich_table)
+        if totals_str:
+            console.print(f"[bold green]{totals_str}[/bold green]\n")
+
 
 
 def generate_monthly_table(db_path: str, view_name: str = "trades", month_filter=None, show_loss_head: int = None):
@@ -409,23 +447,9 @@ def generate_distribution_table(
         title_suffix += f" [FILTER: {pattern_filter}]"
 
     title_text = f"PATTERN PERFORMANCE DISTRIBUTION FOR '{pattern_col}'{title_suffix} (View: {view_name})"
+    totals_str = f"TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}"
 
-    if output_fmt == "markdown":
-        print(f"### {title_text}\n")
-        print(display_df.to_markdown(index=False))
-        print(f"\n**TOTALS**: `{tot_trades:,}` Trades | `{tot_win:,}` Wins | `{tot_loss:,}` Losses | **Win%**: `{tot_win_pct:.2f}%` | **Net PnL**: `{tot_pnl_str}`\n")
-    else:
-        pd.set_option("display.max_columns", None)
-        pd.set_option("display.width", 1000)
-        pd.set_option("display.max_rows", 200)
-
-        print("\n" + "="*85)
-        print(f" {title_text}")
-        print("="*85)
-        print(display_df.to_string(index=False))
-        print("="*85)
-        print(f" TOTALS : {tot_trades:,} Trades | {tot_win:,} Wins | {tot_loss:,} Losses | Win%: {tot_win_pct:.2f}% | Net PnL: {tot_pnl_str}")
-        print("="*85 + "\n")
+    print_dataframe(display_df, title_text=title_text, totals_str=totals_str, output_fmt=output_fmt)
 
 
 def generate_loss_profile(db_path: str, view_name: str = "trades"):

@@ -80,6 +80,9 @@ paths:
 
 # Project Tools & Executables Reference
 tools:
+  loss_profile:
+    path: "Core/ta_patterns_book/loss_profile"
+    purpose: "Strategy loss profiler, monthly, weekly, duration, & pattern distribution reporter."
   duckdb_explorer:
     path: "Utils/duckdb-explorar-tool/duckdb_explorer.py"
     purpose: "Agent-friendly CLI for inspecting, querying, profiling, searching, and running Pandas operations on DuckDB databases."
@@ -89,6 +92,17 @@ tools:
   tools_info:
     path: "Utils/tools-info.md"
     purpose: "Authoritative documentation index for Gemini/Antigravity agents to discover and execute Utils CLI tools."
+
+# Terminal & Stdio Display Settings
+display:
+  formatter: "rich"
+  table:
+    box: null                  # Borderless table (no box borders)
+    show_header: true
+    header_style: "bold cyan"
+    show_edge: false
+    pad_edge: false
+
 
 # Quick File Routing Table (AI & Developer Placement Reference)
 file_routing:
