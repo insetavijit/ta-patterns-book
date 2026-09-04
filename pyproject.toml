@@ -15,7 +15,8 @@ dependencies = [
 ]
 
 [project.scripts]
-ta-patterns-book = "ta_patterns_book:main"
+ta-patterns-book = "ta_patterns_book.loss_profile.cli:main"
+loss-profile = "ta_patterns_book.loss_profile.cli:main"
 trade-book-charts = "trade_book_charts.cli:main"
 trade-view = "trade_book_charts.cli:main"
 tradebook-tool = "trade_book_charts.cli:main"

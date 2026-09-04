@@ -1,2 +1,5 @@
-def main() -> None:
-    print("Hello from ta-patterns-book!")
+"""ta_patterns_book core domain package."""
+
+from . import loss_profile
+
+__all__ = ["loss_profile"]
