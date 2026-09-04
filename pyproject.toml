@@ -9,6 +9,7 @@ dependencies = [
     "matplotlib>=3.11.1",
     "mplfinance>=0.12.10b0",
     "pandas>=3.0.5",
+    "pyyaml>=6.0.3",
     "seaborn>=0.13.2",
     "ta-patterns>=1.1.1",
 ]
