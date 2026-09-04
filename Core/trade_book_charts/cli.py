@@ -150,10 +150,12 @@ def _build_tradebook_parser(subparsers):
 
     a = parser.add_argument(
         "--max-charts",
+        "--limit",
         "-m",
+        "-l",
         type=int,
         default=18,
-        help="Max charts per canvas page (default: 18, must be >= 1)",
+        help="Max charts per canvas page / limit per page (default: 18, must be >= 1)",
     )
     a.constraint = {"type": "integer", "minimum": 1}
 
