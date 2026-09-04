@@ -44,6 +44,8 @@
 - **Candle State Nomenclature**:
   - Direction: `U` (Close >= Prev Close) or `D` (Close < Prev Close)
   - Color: `G` (Close > Open) or `R` (Close <= Open)
+- **Stdio Formatting Standard**:
+  - All terminal table outputs must use `rich` with borderless formatting (`box: null` / `box=None`) as configured in [`Shared/cnf.yaml`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/cnf.yaml).
 
 ---
 
