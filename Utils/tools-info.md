@@ -3,7 +3,7 @@
 This document serves as the authoritative guide for AI coding agents (Gemini, Antigravity) and human developers to discover, understand, and execute CLI utilities located in the `Utils/` directory.
 
 > [!NOTE]
-> **Tradebook & SmartGrid CLI** (`trade_view`) has been promoted to a modular workspace package under [`Core/trade_view/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/trade_view/). Run it directly via `uv run trade-view` or `uv run python -m trade_view`.
+> **Tradebook & SmartGrid CLI** (`trade_book_charts`) has been promoted to a modular workspace package under [`Core/trade_book_charts/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/trade_book_charts/). Run it directly via `uv run trade-book-charts` or `uv run python -m trade_book_charts`.
 
 ---
 
@@ -12,7 +12,7 @@ This document serves as the authoritative guide for AI coding agents (Gemini, An
 | Tool Name | Executable Path | Spec / Manual | Primary Purpose | Default Execution |
 | :--- | :--- | :--- | :--- | :--- |
 | **DuckDB Explorer CLI** | [`Utils/duckdb-explorar-tool/duckdb_explorer.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/duckdb-explorar-tool/duckdb_explorer.py) | [`utils.yaml`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/duckdb-explorar-tool/utils.yaml) | Read-only inspection, SQL querying, column profiling, Pandas transformations, & exporting. | `uv run python Utils/duckdb-explorar-tool/duckdb_explorer.py` |
-| **TradeView Package** *(Core)* | [`Core/trade_view/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/trade_view/) | `uv run trade-view describe --pretty` | SmartGrid chart packing, trade playbook PNG generation, & layout engine. | `uv run trade-view` |
+| **TradeBook Charts Package** *(Core)* | [`Core/trade_book_charts/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/trade_book_charts/) | `uv run trade-book-charts describe --pretty` | SmartGrid chart packing, trade playbook PNG generation, & layout engine. | `uv run trade-book-charts` |
 
 ---
 
@@ -54,11 +54,11 @@ uv run python Utils/duckdb-explorar-tool/duckdb_explorer.py Shared/Data/eur_usd_
 
 ---
 
-## 2. TradeView Package (`trade_view`)
+## 2. TradeBook Charts Package (`trade_book_charts`)
 
-* **Package Location**: [`Core/trade_view/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/trade_view/)
-* **Execution**: `uv run trade-view` or `uv run python -m trade_view`
-* **Contract Introspection**: `uv run trade-view describe --pretty`
+* **Package Location**: [`Core/trade_book_charts/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/trade_book_charts/)
+* **Execution**: `uv run trade-book-charts` or `uv run python -m trade_book_charts`
+* **Contract Introspection**: `uv run trade-book-charts describe --pretty`
 
 ### Subcommand Overview
 
@@ -71,28 +71,28 @@ uv run python Utils/duckdb-explorar-tool/duckdb_explorer.py Shared/Data/eur_usd_
    * Standalone layout packing engine test bench (no database, no image rendering).
    * Packs arbitrary chart candle counts using `optimal` (O(n²) DP), `wordwrap` (O(n) greedy), or `bestfit` (bin packing) strategies.
 3. **`describe`**:
-   * Self-introspecting contract generator (`uv run trade-view describe --pretty`). Emits full machine-readable JSON schema of flags, choices, defaults, and trade column contracts.
+   * Self-introspecting contract generator (`uv run trade-book-charts describe --pretty`). Emits full machine-readable JSON schema of flags, choices, defaults, and trade column contracts.
 
 ### Agent Quickstart Commands
 
 ```bash
 # 1. Introspect tool contract and flags schema
-uv run trade-view describe --pretty
+uv run trade-book-charts describe --pretty
 
 # 2. Dry-run validation of a tradebook query (zero rendering cost)
-uv run trade-view tradebook \
+uv run trade-book-charts tradebook \
   --db Shared/Data/eur_usd_trades_5m.duckdb \
   --sql "SELECT uid AS trade_id, entry_time, entry_price, sl_price, tp_price, pnl FROM trades WHERE pnl < 0 LIMIT 6" \
   --ohlcv-table ohlcv --dry-run --json
 
 # 3. Render trade playbook PNG canvas
-uv run trade-view tradebook \
+uv run trade-book-charts tradebook \
   --db Shared/Data/eur_usd_trades_5m.duckdb \
   --sql "SELECT uid AS trade_id, entry_time, entry_price, sl_price, tp_price, pnl FROM trades WHERE pnl < 0 LIMIT 6" \
   --ohlcv-table ohlcv --output Shared/OUTs/png/playbook_losers.png --json
 
 # 4. Test SmartGrid layout algorithm standalone
-uv run trade-view smartgrid \
+uv run trade-book-charts smartgrid \
   --candles 200 150 350 25 180 --row-capacity 400 --dry-run --json
 ```
 

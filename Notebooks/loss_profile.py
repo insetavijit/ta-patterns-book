@@ -22,8 +22,8 @@ import os
 import duckdb
 import pandas as pd
 import yaml
-from trade_view import generate_trade_book
-from trade_view.db import _load_tradebook_deps, build_ohlcv_column_map
+from trade_book_charts import generate_trade_book
+from trade_book_charts.db import _load_tradebook_deps, build_ohlcv_column_map
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))

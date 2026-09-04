@@ -28,7 +28,7 @@ def plot_first_10_trades():
     cmd = [
         sys.executable,
         "-m",
-        "trade_view",
+        "trade_book_charts",
         "tradebook",
         "--db",
         str(DB_PATH),

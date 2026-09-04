@@ -16,8 +16,9 @@ dependencies = [
 
 [project.scripts]
 ta-patterns-book = "ta_patterns_book:main"
-trade-view = "trade_view.cli:main"
-tradebook-tool = "trade_view.cli:main"
+trade-book-charts = "trade_book_charts.cli:main"
+trade-view = "trade_book_charts.cli:main"
+tradebook-tool = "trade_book_charts.cli:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]
