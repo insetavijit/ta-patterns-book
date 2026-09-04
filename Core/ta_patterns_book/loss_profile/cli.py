@@ -2,14 +2,11 @@
 
 import argparse
 from .db import get_duckdb_path
-from .reporters import (
-    generate_distribution_table,
-    generate_duration_table,
-    generate_loss_group_table,
-    generate_loss_profile,
-    generate_monthly_table,
-    generate_weekly_table,
-)
+from .distribution import generate_distribution_table, generate_loss_profile
+from .duration import generate_duration_table
+from .loss_group import generate_loss_group_table
+from .monthly import generate_monthly_table
+from .weekly import generate_weekly_table
 
 
 def main():
@@ -41,9 +38,21 @@ def main():
             output_fmt=output_fmt,
         )
     elif args.loss_group:
-        generate_loss_group_table(db_path, view_name=args.view, output_fmt=output_fmt)
+        generate_loss_group_table(
+            db_path,
+            view_name=args.view,
+            pattern_filter=args.pattern_filter,
+            output_fmt=output_fmt,
+        )
     elif args.duration_group or args.duration_till is not None or args.losses_only:
-        generate_duration_table(db_path, view_name=args.view, duration_till=args.duration_till, losses_only=args.losses_only, output_fmt=output_fmt)
+        generate_duration_table(
+            db_path,
+            view_name=args.view,
+            duration_till=args.duration_till,
+            losses_only=args.losses_only,
+            pattern_filter=args.pattern_filter,
+            output_fmt=output_fmt,
+        )
     elif args.weekly:
         generate_weekly_table(db_path, view_name=args.view, output_fmt=output_fmt)
     elif args.monthly is not None or args.loss is not None:
