@@ -22,6 +22,7 @@ def main():
     parser.add_argument("--duration-till", type=int, default=None, help="Limit duration table output up to specified candle duration (e.g. 5)")
     parser.add_argument("--loss-group", "--loss-grp", action="store_true", help="Display loss amount bracket performance breakdown table")
     parser.add_argument("--distribution", "--dist", nargs="?", const="entry_1", type=str, default=None, help="Display pattern performance distribution for specified column (default: entry_1)")
+    parser.add_argument("--pattern-filter", "--filter", type=str, default=None, help="Filter trades by pattern expression (e.g. entry_1=DR-DR-DR)")
     parser.add_argument("--losses-only", action="store_true", help="Filter breakdown to show losses only (pnl <= 0)")
     parser.add_argument("--loss", nargs="?", const=12, type=int, default=None, help="Show head of losing trades table & render Trade Playbook (default limit: 12)")
 
@@ -29,7 +30,13 @@ def main():
     db_path = args.db if args.db else get_duckdb_path()
 
     if args.distribution is not None:
-        generate_distribution_table(db_path, view_name=args.view, pattern_col=args.distribution, losses_only=args.losses_only)
+        generate_distribution_table(
+            db_path,
+            view_name=args.view,
+            pattern_col=args.distribution,
+            losses_only=args.losses_only,
+            pattern_filter=args.pattern_filter,
+        )
     elif args.loss_group:
         generate_loss_group_table(db_path, view_name=args.view)
     elif args.duration_group or args.duration_till is not None or args.losses_only:

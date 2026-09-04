@@ -323,12 +323,35 @@ def generate_loss_group_table(db_path: str, view_name: str = "trades"):
     print("="*85 + "\n")
 
 
-def generate_distribution_table(db_path: str, view_name: str = "trades", pattern_col: str = "entry_1", losses_only: bool = False):
+def generate_distribution_table(
+    db_path: str,
+    view_name: str = "trades",
+    pattern_col: str = "entry_1",
+    losses_only: bool = False,
+    pattern_filter: str = None,
+):
     con = get_db_connection(db_path, read_only=True)
     
     cols_df = con.execute(f'SELECT * FROM "{view_name}" LIMIT 0;').df()
     has_pattern_col = pattern_col in cols_df.columns
-    where_extra = "WHERE t.pnl <= 0" if losses_only else ""
+
+    where_clauses = []
+    if losses_only:
+        where_clauses.append("t.pnl <= 0")
+    if pattern_filter:
+        # If user passed e.g. "entry_1 = DR-DR-DR" without quotes or "entry_1 = 'DR-DR-DR'"
+        filter_expr = pattern_filter.strip()
+        if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
+            col_part, val_part = filter_expr.split("=", 1)
+            filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
+        
+        # Qualify with table prefix if needed
+        if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
+            where_clauses.append(f"p.{filter_expr}")
+        else:
+            where_clauses.append(filter_expr)
+
+    where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
     if has_pattern_col:
         query = f"""
@@ -340,7 +363,7 @@ def generate_distribution_table(db_path: str, view_name: str = "trades", pattern
                 ROUND(COUNT(CASE WHEN pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 2) AS "win%",
                 SUM(pnl) AS raw_pnl
             FROM "{view_name}" t
-            {where_extra}
+            {where_str}
             GROUP BY "{pattern_col}"
             ORDER BY "number of trades" DESC, "win%" DESC;
         """
@@ -355,7 +378,7 @@ def generate_distribution_table(db_path: str, view_name: str = "trades", pattern
                 SUM(t.pnl) AS raw_pnl
             FROM "{view_name}" t
             JOIN "3candels_patterns" p ON t.trade_id = p.trade_id
-            {where_extra}
+            {where_str}
             GROUP BY p."{pattern_col}"
             ORDER BY "number of trades" DESC, "win%" DESC;
         """
@@ -364,7 +387,7 @@ def generate_distribution_table(db_path: str, view_name: str = "trades", pattern
     con.close()
 
     if df_dist.empty:
-        print(f"No trades found for pattern column '{pattern_col}'.")
+        print(f"No trades found for pattern column '{pattern_col}' with filter '{pattern_filter}'.")
         return
 
     df_dist["ammount ( sum )"] = df_dist["raw_pnl"].apply(
@@ -377,7 +400,12 @@ def generate_distribution_table(db_path: str, view_name: str = "trades", pattern
     pd.set_option("display.width", 1000)
     pd.set_option("display.max_rows", 200)
 
-    title_suffix = " [LOSSES ONLY]" if losses_only else ""
+    title_suffix = ""
+    if losses_only:
+        title_suffix += " [LOSSES ONLY]"
+    if pattern_filter:
+        title_suffix += f" [FILTER: {pattern_filter}]"
+
     print("\n" + "="*85)
     print(f" PATTERN PERFORMANCE DISTRIBUTION FOR '{pattern_col}'{title_suffix} (View: {view_name})")
     print("="*85)
