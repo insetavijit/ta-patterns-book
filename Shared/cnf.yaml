@@ -81,8 +81,14 @@ paths:
 # Project Tools & Executables Reference
 tools:
   duckdb_explorer:
-    path: "Utils/duckdb_explorer.py"
-    purpose: "Interactive terminal utility for inspecting, querying, and exploring DuckDB database tables, schemas, and pattern datasets."
+    path: "Utils/duckdb-explorar-tool/duckdb_explorer.py"
+    purpose: "Agent-friendly CLI for inspecting, querying, profiling, searching, and running Pandas operations on DuckDB databases."
+  tradebook_tool:
+    path: "Utils/trade-view-tool/tradebook_tool_v4.py"
+    purpose: "SmartGrid-packed trade playbook PNG canvas generator and standalone chart packing layout engine."
+  tools_info:
+    path: "Utils/tools-info.md"
+    purpose: "Authoritative documentation index for Gemini/Antigravity agents to discover and execute Utils CLI tools."
 
 # Quick File Routing Table (AI & Developer Placement Reference)
 file_routing:
