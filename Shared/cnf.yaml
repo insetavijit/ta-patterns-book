@@ -84,8 +84,8 @@ tools:
     path: "Utils/duckdb-explorar-tool/duckdb_explorer.py"
     purpose: "Agent-friendly CLI for inspecting, querying, profiling, searching, and running Pandas operations on DuckDB databases."
   tradebook_tool:
-    path: "Utils/trade-view-tool/tradebook_tool_v4.py"
-    purpose: "SmartGrid-packed trade playbook PNG canvas generator and standalone chart packing layout engine."
+    path: "Core/trade_view"
+    purpose: "SmartGrid-packed trade playbook PNG canvas generator and standalone chart packing layout engine (UV workspace package)."
   tools_info:
     path: "Utils/tools-info.md"
     purpose: "Authoritative documentation index for Gemini/Antigravity agents to discover and execute Utils CLI tools."
