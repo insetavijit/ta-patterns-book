@@ -139,26 +139,30 @@ class ClassicFloorModV2:
                 setup_r1 = r1_arr[i]
                 signal_body_low = body_low_arr[i]
 
-            # Entry at Bar +3 (Open of 4th candle)
+            # Entry evaluation at scheduled entry bar (default: signal_bar + 3)
             if waiting_for_entry and (signal_bar is not None) and (i == signal_bar + 3):
-                waiting_for_entry = False
-                in_trade = True
-                trade_id_counter += 1
+                # If pre-entry 3-candle setup (entry_1) is DR-DR-DR, delay entry by 3 additional candles
+                if df['entry_1'].iloc[i] == 'DR-DR-DR':
+                    signal_bar = signal_bar + 3  # Shift scheduled entry bar to signal_bar + 6
+                else:
+                    waiting_for_entry = False
+                    in_trade = True
+                    trade_id_counter += 1
 
-                entry_body_low = body_low_arr[i]
-                sl_anchor = min(signal_body_low, entry_body_low)
-                sl_distance = (setup_r1 - setup_s1) / 2.0
+                    entry_body_low = body_low_arr[i]
+                    sl_anchor = min(signal_body_low, entry_body_low)
+                    sl_distance = (setup_r1 - setup_s1) / 2.0
 
-                entry_price_val = open_arr[i]
-                stop_price = sl_anchor - sl_distance
-                target_price = setup_r1
+                    entry_price_val = open_arr[i]
+                    stop_price = sl_anchor - sl_distance
+                    target_price = setup_r1
 
-                in_trade_series[i] = True
-                trade_id_series[i] = trade_id_counter
-                entry_price_series[i] = entry_price_val
-                sl_series[i] = stop_price
-                tp_series[i] = target_price
-                entries.iloc[i] = True
+                    in_trade_series[i] = True
+                    trade_id_series[i] = trade_id_counter
+                    entry_price_series[i] = entry_price_val
+                    sl_series[i] = stop_price
+                    tp_series[i] = target_price
+                    entries.iloc[i] = True
 
                 # Check intrabar exit on entry bar
                 target_hit = high_arr[i] >= target_price
