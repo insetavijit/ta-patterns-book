@@ -36,5 +36,5 @@ class ClassicFloorV2AStrategy:
         params: dict[str, Any] | None = None,
     ) -> tuple[pd.Series, pd.Series]:
         """Delegate to ClassicFloorModV2A and discard the trades_df third element."""
-        entries, exits, _trades_df = self._inner.generate_signals(ohlcv)
+        entries, exits, _trades_df = self._inner.generate_signals(ohlcv, params=params)
         return entries, exits

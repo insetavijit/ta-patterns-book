@@ -66,8 +66,15 @@ paths:
     data:
       path: "Shared/Data"
       primary_db: "Shared/Data/eur_usd_trades_5m.duckdb"
-      backtest_db: "Shared/Data/ohlcv_eruusd.duckdb"
+      backtest_db: "Shared/INPs/Ohlcv_2325Eurusd.duckdb"
       purpose: "Shared static data fixtures and reference tables."
+    strategies:
+      path: "Shared/straragYs"
+      active_strategy_file: "Shared/straragYs/classic_floor_mod_v2.py"
+      active_strategy_name: "classic_floor_mod_v2"
+      active_db_path: "Shared/INPs/Ohlcv_2325Eurusd.duckdb"
+      active_table: "ohlcv_eurusd_1m_2025"
+      purpose: "Dedicated focus strategy file and active database targets to prevent collateral edits."
     config:
       path: "Shared/cnf.yaml"
       purpose: "Central project paths and environment configuration."

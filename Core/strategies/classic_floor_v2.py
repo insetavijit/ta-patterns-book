@@ -43,11 +43,10 @@ class ClassicFloorV2Strategy:
 
         Args:
             ohlcv:  DataFrame with columns [open, high, low, close, volume].
-            params: Strategy parameter dict (currently unused by ClassicFloorModV2
-                    which derives all parameters internally).
+            params: Strategy parameter dict (supports allow_same_bar_exit).
 
         Returns:
             (entries, exits): Boolean pd.Series aligned to ohlcv.index.
         """
-        entries, exits, _trades_df = self._inner.generate_signals(ohlcv)
+        entries, exits, _trades_df = self._inner.generate_signals(ohlcv, params=params)
         return entries, exits

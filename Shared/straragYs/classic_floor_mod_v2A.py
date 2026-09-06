@@ -6,10 +6,18 @@ except ImportError:
     ta = None
 
 class ClassicFloorModV2:
-    name = "classic_floor_mod_v2"
+    name = "classic_floor_mod_v2a"
     warmup_candles = 22
 
-    def generate_signals(self, ohlcv: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
+    def __init__(self, allow_same_bar_exit: bool = False, filter_zero_volume: bool = True):
+        self.allow_same_bar_exit = allow_same_bar_exit
+        self.filter_zero_volume = filter_zero_volume
+
+    def generate_signals(
+        self,
+        ohlcv: pd.DataFrame,
+        params: dict | None = None,
+    ) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
         """
         ClassicFloorModV2 (exp-3): Updated strategy in exp-3 with 3-candle pattern state classification
         and dynamic DR-DR-DR delay logic.
@@ -18,7 +26,11 @@ class ClassicFloorModV2:
         - DR-DR-DR Pattern Check: If pre-entry 3-candle setup (entry_1) is DR-DR-DR, delay entry by 3 additional candles
         - Dynamic Stop Loss (lower of signal & entry body low minus half R1-S1 range)
         - Take Profit at frozen R1
+        - allow_same_bar_exit: if False (default), holds trade at least 1 candle, suppressing new signals
+        - filter_zero_volume: if True (default), suppresses phantom entries on flat-line / 0-volume closed market bars
         """
+        allow_same_bar_exit = (params or {}).get("allow_same_bar_exit", self.allow_same_bar_exit)
+        filter_zero_volume = (params or {}).get("filter_zero_volume", self.filter_zero_volume)
         if ohlcv.empty:
             empty_series = pd.Series(dtype=bool)
             return empty_series, empty_series, pd.DataFrame()
@@ -65,6 +77,7 @@ class ClassicFloorModV2:
         high_arr = df['high'].values
         low_arr = df['low'].values
         close_arr = df['close'].values
+        volume_arr = df['volume'].values if 'volume' in df.columns else np.ones(n)
         s1_arr = df['s1'].values
         r1_arr = df['r1'].values
         body_low_arr = df['body_low'].values
@@ -130,7 +143,8 @@ class ClassicFloorModV2:
                     continue
 
             # Signal Condition (Bar 0: close <= s1)
-            signal_condition = (not np.isnan(s1_arr[i])) and (close_arr[i] <= s1_arr[i]) and (not waiting_for_entry) and (not in_trade)
+            is_active_bar = (volume_arr[i] > 0 and high_arr[i] > low_arr[i]) if filter_zero_volume else True
+            signal_condition = (not np.isnan(s1_arr[i])) and (close_arr[i] <= s1_arr[i]) and (not waiting_for_entry) and (not in_trade) and is_active_bar
 
             if signal_condition:
                 waiting_for_entry = True
@@ -164,29 +178,30 @@ class ClassicFloorModV2:
                     tp_series[i] = target_price
                     entries.iloc[i] = True
 
-                    # Check intrabar exit on entry bar
-                    target_hit = high_arr[i] >= target_price
-                    stop_hit = low_arr[i] <= stop_price
-                    if target_hit or stop_hit:
-                        exits.iloc[i] = True
-                        in_trade = False
-                        exit_price = target_price if target_hit else stop_price
-                        pnl = exit_price - entry_price_val
-                        pnl_pct = (pnl / entry_price_val) * 100.0
+                    # Check intrabar exit on entry bar (if allowed)
+                    if allow_same_bar_exit:
+                        target_hit = high_arr[i] >= target_price
+                        stop_hit = low_arr[i] <= stop_price
+                        if target_hit or stop_hit:
+                            exits.iloc[i] = True
+                            in_trade = False
+                            exit_price = target_price if target_hit else stop_price
+                            pnl = exit_price - entry_price_val
+                            pnl_pct = (pnl / entry_price_val) * 100.0
 
-                        exit_price_series[i] = exit_price
-                        realized_pnl_series[i] = pnl
-                        realized_pnl_pct_series[i] = pnl_pct
-                        is_win_series[i] = 1 if target_hit else -1
-                        exit_reason_series[i] = "TP" if target_hit else "SL"
+                            exit_price_series[i] = exit_price
+                            realized_pnl_series[i] = pnl
+                            realized_pnl_pct_series[i] = pnl_pct
+                            is_win_series[i] = 1 if target_hit else -1
+                            exit_reason_series[i] = "TP" if target_hit else "SL"
 
-                        signal_bar = None
-                        setup_s1 = None
-                        setup_r1 = None
-                        signal_body_low = None
-                        stop_price = None
-                        target_price = None
-                        entry_price_val = None
+                            signal_bar = None
+                            setup_s1 = None
+                            setup_r1 = None
+                            signal_body_low = None
+                            stop_price = None
+                            target_price = None
+                            entry_price_val = None
 
         # Build Clean Strategy Trade Table
         trades_df = pd.DataFrame(index=ohlcv.index)

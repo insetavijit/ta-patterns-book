@@ -5,7 +5,15 @@ class ClassicFloorModV1:
     name = "classic_floor_mod_v1"
     warmup_candles = 22
 
-    def generate_signals(self, ohlcv: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    def __init__(self, allow_same_bar_exit: bool = False, filter_zero_volume: bool = True):
+        self.allow_same_bar_exit = allow_same_bar_exit
+        self.filter_zero_volume = filter_zero_volume
+
+    def generate_signals(
+        self,
+        ohlcv: pd.DataFrame,
+        params: dict | None = None,
+    ) -> tuple[pd.Series, pd.Series]:
         """
         Generates buy entry and exit signals matching classic_floor_mod_v1.pine:
         - Pivot calculations: 20-period high/low/close shifted by 1 bar.
@@ -15,7 +23,11 @@ class ClassicFloorModV1:
         - Stop Loss (SL): slAnchor - slDistance
             where slAnchor = min(signal_body_low, entry_body_low)
             and slDistance = (setup_R1 - setup_S1) / 2
+        - allow_same_bar_exit: if False (default), holds trade at least 1 candle, suppressing new signals
+        - filter_zero_volume: if True (default), suppresses phantom entries on flat-line / 0-volume closed market bars
         """
+        allow_same_bar_exit = (params or {}).get("allow_same_bar_exit", self.allow_same_bar_exit)
+        filter_zero_volume = (params or {}).get("filter_zero_volume", self.filter_zero_volume)
         if ohlcv.empty:
             empty_series = pd.Series(dtype=bool)
             return empty_series, empty_series
@@ -56,6 +68,7 @@ class ClassicFloorModV1:
         high_arr = df['high'].values
         low_arr = df['low'].values
         close_arr = df['close'].values
+        volume_arr = df['volume'].values if 'volume' in df.columns else np.ones(n)
         s1_arr = df['s1'].values
         r1_arr = df['r1'].values
         body_low_arr = df['body_low'].values
@@ -80,7 +93,8 @@ class ClassicFloorModV1:
 
             # 3. SIGNAL CANDLE
             # close <= s1 and not waitingForEntry and not inTrade
-            signal_condition = (not np.isnan(s1_arr[i])) and (close_arr[i] <= s1_arr[i]) and (not waiting_for_entry) and (not in_trade)
+            is_active_bar = (volume_arr[i] > 0 and high_arr[i] > low_arr[i]) if filter_zero_volume else True
+            signal_condition = (not np.isnan(s1_arr[i])) and (close_arr[i] <= s1_arr[i]) and (not waiting_for_entry) and (not in_trade) and is_active_bar
 
             if signal_condition:
                 waiting_for_entry = True
@@ -103,18 +117,19 @@ class ClassicFloorModV1:
 
                 entries.iloc[i] = True
 
-                # Check if exit condition occurs on entry bar (intrabar hit)
-                target_hit = high_arr[i] >= target_price
-                stop_hit = low_arr[i] <= stop_price
-                if target_hit or stop_hit:
-                    exits.iloc[i] = True
-                    in_trade = False
-                    signal_bar = None
-                    setup_s1 = None
-                    setup_r1 = None
-                    signal_body_low = None
-                    stop_price = None
-                    target_price = None
+                # Check if exit condition occurs on entry bar (if allowed)
+                if allow_same_bar_exit:
+                    target_hit = high_arr[i] >= target_price
+                    stop_hit = low_arr[i] <= stop_price
+                    if target_hit or stop_hit:
+                        exits.iloc[i] = True
+                        in_trade = False
+                        signal_bar = None
+                        setup_s1 = None
+                        setup_r1 = None
+                        signal_body_low = None
+                        stop_price = None
+                        target_price = None
 
         # Re-align with original dataframe index
         entries.index = ohlcv.index

@@ -1,33 +1,24 @@
 import pandas as pd
 import numpy as np
-import pandas_ta_classic as ta
+try:
+    import pandas_ta_classic as ta
+except ImportError:
+    ta = None
 
 class ClassicFloorModV2:
     name = "classic_floor_mod_v2"
     warmup_candles = 22
 
-    def __init__(self, allow_same_bar_exit: bool = False, filter_zero_volume: bool = True):
-        self.allow_same_bar_exit = allow_same_bar_exit
-        self.filter_zero_volume = filter_zero_volume
-
-    def generate_signals(
-        self,
-        ohlcv: pd.DataFrame,
-        params: dict | None = None,
-    ) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
+    def generate_signals(self, ohlcv: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
         """
-        ClassicFloorModV2: Streamlined strategy using pandas_ta_classic for calculations,
-        focusing purely on raw trade execution and strategy core logic.
+        ClassicFloorModV2 (exp-3): Updated strategy in exp-3 with 3-candle pattern state classification
+        and dynamic DR-DR-DR delay logic.
         - Core Pivot math: Pivot, S1, R1 (20-period lookback, shifted by 1)
-        - 2-Candle Delay Entry
+        - Scheduled Entry at Bar +3
+        - DR-DR-DR Pattern Check: If pre-entry 3-candle setup (entry_1) is DR-DR-DR, delay entry by 3 additional candles
         - Dynamic Stop Loss (lower of signal & entry body low minus half R1-S1 range)
         - Take Profit at frozen R1
-        - allow_same_bar_exit: if False (default), holds trade at least 1 candle, suppressing new signals
-        - filter_zero_volume: if True (default), suppresses phantom entries on flat-line / 0-volume closed market bars
-        - Clean raw trade execution table output.
         """
-        allow_same_bar_exit = (params or {}).get("allow_same_bar_exit", self.allow_same_bar_exit)
-        filter_zero_volume = (params or {}).get("filter_zero_volume", self.filter_zero_volume)
         if ohlcv.empty:
             empty_series = pd.Series(dtype=bool)
             return empty_series, empty_series, pd.DataFrame()
@@ -48,15 +39,32 @@ class ClassicFloorModV2:
         df['r1'] = r1
         df['body_low'] = np.minimum(df['open'], df['close'])
 
+        # 2. CANDLE STATE & 3-CANDLE PATTERN CLASSIFICATION INDICATORS
+        prev_close_bar = df['close'].shift(1)
+        prev_close_bar.iloc[0] = df['open'].iloc[0]
+
+        is_up = df['close'] >= prev_close_bar
+        is_green = df['close'] > df['open']
+        dir_str = np.where(is_up, "U", "D")
+        col_str = np.where(is_green, "G", "R")
+        df['candle_state'] = dir_str + col_str
+
+        # Calculate pattern variants (entry_1 to entry_4) for each bar
+        cs = df['candle_state']
+        df['entry_1'] = cs.shift(3) + "-" + cs.shift(2) + "-" + cs.shift(1)
+        df['entry_2'] = cs.shift(2) + "-" + cs.shift(1) + "-" + cs
+        df['entry_3'] = cs.shift(1) + "-" + cs + "-" + cs.shift(-1)
+        df['entry_4'] = cs + "-" + cs.shift(-1) + "-" + cs.shift(-2) + "-" + cs.shift(-3)
+
         # Output signal arrays
         entries = pd.Series(False, index=df.index)
         exits = pd.Series(False, index=df.index)
 
         n = len(df)
+        open_arr = df['open'].values
         high_arr = df['high'].values
         low_arr = df['low'].values
         close_arr = df['close'].values
-        volume_arr = df['volume'].values if 'volume' in df.columns else np.ones(n)
         s1_arr = df['s1'].values
         r1_arr = df['r1'].values
         body_low_arr = df['body_low'].values
@@ -122,8 +130,7 @@ class ClassicFloorModV2:
                     continue
 
             # Signal Condition (Bar 0: close <= s1)
-            is_active_bar = (volume_arr[i] > 0 and high_arr[i] > low_arr[i]) if filter_zero_volume else True
-            signal_condition = (not np.isnan(s1_arr[i])) and (close_arr[i] <= s1_arr[i]) and (not waiting_for_entry) and (not in_trade) and is_active_bar
+            signal_condition = (not np.isnan(s1_arr[i])) and (close_arr[i] <= s1_arr[i]) and (not waiting_for_entry) and (not in_trade)
 
             if signal_condition:
                 waiting_for_entry = True
@@ -132,29 +139,32 @@ class ClassicFloorModV2:
                 setup_r1 = r1_arr[i]
                 signal_body_low = body_low_arr[i]
 
-            # Entry at Bar +2
-            if waiting_for_entry and (signal_bar is not None) and (i == signal_bar + 2):
-                waiting_for_entry = False
-                in_trade = True
-                trade_id_counter += 1
+            # Entry evaluation at scheduled entry bar (default: signal_bar + 3)
+            if waiting_for_entry and (signal_bar is not None) and (i == signal_bar + 3):
+                # If pre-entry 3-candle setup (entry_1) is DR-DR-DR, delay entry by 3 additional candles
+                if df['entry_1'].iloc[i] == 'DR-DR-DR':
+                    signal_bar = signal_bar + 3  # Shift scheduled entry bar to signal_bar + 6
+                else:
+                    waiting_for_entry = False
+                    in_trade = True
+                    trade_id_counter += 1
 
-                entry_body_low = body_low_arr[i]
-                sl_anchor = min(signal_body_low, entry_body_low)
-                sl_distance = (setup_r1 - setup_s1) / 2.0
+                    entry_body_low = body_low_arr[i]
+                    sl_anchor = min(signal_body_low, entry_body_low)
+                    sl_distance = (setup_r1 - setup_s1) / 2.0
 
-                entry_price_val = close_arr[i]
-                stop_price = sl_anchor - sl_distance
-                target_price = setup_r1
+                    entry_price_val = open_arr[i]
+                    stop_price = sl_anchor - sl_distance
+                    target_price = setup_r1
 
-                in_trade_series[i] = True
-                trade_id_series[i] = trade_id_counter
-                entry_price_series[i] = entry_price_val
-                sl_series[i] = stop_price
-                tp_series[i] = target_price
-                entries.iloc[i] = True
+                    in_trade_series[i] = True
+                    trade_id_series[i] = trade_id_counter
+                    entry_price_series[i] = entry_price_val
+                    sl_series[i] = stop_price
+                    tp_series[i] = target_price
+                    entries.iloc[i] = True
 
-                # Check intrabar exit on entry bar (if allowed)
-                if allow_same_bar_exit:
+                    # Check intrabar exit on entry bar
                     target_hit = high_arr[i] >= target_price
                     stop_hit = low_arr[i] <= stop_price
                     if target_hit or stop_hit:
@@ -196,32 +206,14 @@ class ClassicFloorModV2:
         trades_df['realized_pnl_pct'] = realized_pnl_pct_series
         trades_df['is_win'] = is_win_series
 
+        # Indicator Columns
+        trades_df['candle_state'] = df['candle_state'].values
+        trades_df['entry_1'] = df['entry_1'].values
+        trades_df['entry_2'] = df['entry_2'].values
+        trades_df['entry_3'] = df['entry_3'].values
+        trades_df['entry_4'] = df['entry_4'].values
+
         entries.index = ohlcv.index
         exits.index = ohlcv.index
 
         return entries, exits, trades_df
-
-
-if __name__ == "__main__":
-    np.random.seed(42)
-    periods = 50
-    dates = pd.date_range("2026-01-01 09:00", periods=periods, freq="min")
-
-    prices = [1.1000] * 25
-    prices += [1.0800, 1.0805, 1.0810, 1.0815, 1.0820, 1.0830, 1.0840, 1.0850, 1.0860, 1.0870, 1.0880, 1.0890, 1.0900, 1.0910, 1.0920]
-    prices += [1.0930] * (periods - len(prices))
-
-    df_dummy = pd.DataFrame({
-        "open": np.array(prices) - 0.0001,
-        "high": np.array(prices) + 0.0002,
-        "low": np.array(prices) - 0.0002,
-        "close": np.array(prices),
-        "volume": 1000
-    }, index=dates)
-
-    strat = ClassicFloorModV2()
-    entries, exits, trades_df = strat.generate_signals(df_dummy)
-
-    print("=== CLASSIC FLOOR MOD V2 (PURE STRATEGY WITH PANDAS-TA-CLASSIC) ===")
-    print(f"Total Entries: {entries.sum()}, Exits: {exits.sum()}\n")
-    print(trades_df.dropna(subset=['sl_price']).head(10))

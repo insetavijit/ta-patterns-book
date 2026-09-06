@@ -39,9 +39,9 @@ class ClassicFloorV1Strategy:
 
         Args:
             ohlcv:  DataFrame with columns [open, high, low, close, volume].
-            params: Optional parameter dict (unused as strategy is self-contained).
+            params: Optional parameter dict (supports allow_same_bar_exit).
 
         Returns:
             (entries, exits): Boolean pd.Series aligned to ohlcv.index.
         """
-        return self._inner.generate_signals(ohlcv)
+        return self._inner.generate_signals(ohlcv, params=params)
