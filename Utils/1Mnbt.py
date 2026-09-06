@@ -26,6 +26,8 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
+import yaml
+
 # Ensure Core is in Python path for strategy registry resolution
 _REPO_ROOT = Path(__file__).resolve().parent
 if _REPO_ROOT.name == "Utils":
@@ -37,6 +39,21 @@ from strategies.registry import get_strategy, list_strategies
 
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("1Mnbt")
+
+
+def get_default_backtest_db() -> str:
+    """Resolve default backtest database path from Shared/cnf.yaml."""
+    cnf_path = _REPO_ROOT / "Shared" / "cnf.yaml"
+    if cnf_path.exists():
+        try:
+            with open(cnf_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                val = data.get("paths", {}).get("shared", {}).get("data", {}).get("backtest_db")
+                if val:
+                    return str(_REPO_ROOT / val) if not Path(val).is_absolute() else val
+        except Exception:
+            pass
+    return str(_REPO_ROOT / "Shared" / "Data" / "ohlcv_eruusd.duckdb")
 
 
 def compute_hash(params: dict[str, Any]) -> str:
@@ -543,8 +560,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--db",
-        default="Shared/Data/ohlcv_eruusd.duckdb",
-        help="Path to DuckDB OHLCV database (default: Shared/Data/ohlcv_eruusd.duckdb)",
+        default=get_default_backtest_db(),
+        help=f"Path to DuckDB OHLCV database (default from cnf.yaml: {get_default_backtest_db()})",
     )
     parser.add_argument(
         "--table",

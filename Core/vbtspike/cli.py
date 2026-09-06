@@ -381,8 +381,8 @@ def backup(db: str | None, config: str | None) -> None:
 
 @cli.command()
 @click.option(
-    "--db", "--duckdb-path", default="Shared/Data/ohlcv_eruusd.duckdb",
-    help="Path to DuckDB database file (defaults to Shared/Data/ohlcv_eruusd.duckdb).",
+    "--db", "--duckdb-path", default=None,
+    help="Path to DuckDB database file (defaults to backtest_db in Shared/cnf.yaml).",
 )
 @click.option(
     "--yes", "-y", is_flag=True, default=False,
@@ -392,17 +392,32 @@ def backup(db: str | None, config: str | None) -> None:
     "--dry-run", is_flag=True, default=False,
     help="Perform verification only and show items that would be removed.",
 )
-def clean(db: str, yes: bool, dry_run: bool) -> None:
+def clean(db: str | None, yes: bool, dry_run: bool) -> None:
     """Verify and remove all trade tables and analytical views for clean backtests.
 
     Preserves raw/resampled candle data (e.g. 'ohlcv') and removes backtest
     artifacts (test_runs, trades, batches, and all strategy-scoped views).
     """
     import duckdb
+    import yaml
     from rich.console import Console
     from rich.table import Table
 
-    db_path = Path(db)
+    if db:
+        db_path = Path(db)
+    else:
+        # Fallback to Shared/cnf.yaml backtest_db
+        cnf_file = Path("Shared/cnf.yaml")
+        db_target = "Shared/Data/ohlcv_eruusd.duckdb"
+        if cnf_file.exists():
+            try:
+                with open(cnf_file, "r", encoding="utf-8") as f:
+                    cdata = yaml.safe_load(f)
+                    db_target = cdata.get("paths", {}).get("shared", {}).get("data", {}).get("backtest_db", db_target)
+            except Exception:
+                pass
+        db_path = Path(db_target)
+
     if not db_path.exists():
         click.echo(f"ERROR: Database file not found: {db_path}", err=True)
         sys.exit(1)
