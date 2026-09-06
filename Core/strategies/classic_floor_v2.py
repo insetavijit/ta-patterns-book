@@ -14,7 +14,7 @@ from typing import Any
 import pandas as pd
 
 # Resolve Shared/straragYs from any working directory
-_STRATEGIES_DIR = Path(__file__).resolve().parents[3] / "Shared" / "straragYs"
+_STRATEGIES_DIR = Path(__file__).resolve().parents[2] / "Shared" / "straragYs"
 if str(_STRATEGIES_DIR) not in sys.path:
     sys.path.insert(0, str(_STRATEGIES_DIR))
 
@@ -37,7 +37,7 @@ class ClassicFloorV2Strategy:
     def generate_signals(
         self,
         ohlcv: pd.DataFrame,
-        params: dict[str, Any],
+        params: dict[str, Any] | None = None,
     ) -> tuple[pd.Series, pd.Series]:
         """Delegate to ClassicFloorModV2 and discard the trades_df third element.
 

@@ -25,23 +25,23 @@ class SmaCrossStrategy:
     def generate_signals(
         self,
         ohlcv: pd.DataFrame,
-        params: dict[str, Any],
+        params: dict[str, Any] | None = None,
     ) -> tuple[pd.Series, pd.Series]:
         """Generate entry/exit signals based on SMA crossover.
 
         Args:
             ohlcv: OHLCV DataFrame indexed by timestamp.
-            params: Must contain 'fast_window' (int) and 'slow_window' (int).
+            params: Optional dict; defaults to fast_window=10, slow_window=50.
 
         Returns:
             (entries, exits) boolean Series.
 
         Raises:
-            KeyError: If required params are missing.
             ValueError: If fast_window >= slow_window.
         """
-        fast = int(params["fast_window"])
-        slow = int(params["slow_window"])
+        p = params or {}
+        fast = int(p.get("fast_window", 10))
+        slow = int(p.get("slow_window", 50))
 
         if fast >= slow:
             raise ValueError(

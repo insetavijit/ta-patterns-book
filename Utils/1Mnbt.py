@@ -26,6 +26,15 @@ import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
+# Ensure Core is in Python path for strategy registry resolution
+_REPO_ROOT = Path(__file__).resolve().parent
+if _REPO_ROOT.name == "Utils":
+    _REPO_ROOT = _REPO_ROOT.parent
+if str(_REPO_ROOT / "Core") not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT / "Core"))
+
+from strategies.registry import get_strategy, list_strategies
+
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("1Mnbt")
 
@@ -79,21 +88,15 @@ def get_monthly_windows(
     return windows
 
 
-def simulate_sma_month(
+def simulate_signals(
     ohlcv: pd.DataFrame,
-    fast_window: int = 10,
-    slow_window: int = 50,
+    entries: pd.Series,
+    exits: pd.Series,
     init_cash: float = 10000.0,
     fees: float = 0.001,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Fast vectorized SMA crossover execution and metric calculation."""
+    """Generic vectorized trade execution and performance metric calculation from signals."""
     close = ohlcv["close"]
-    fast_ma = close.rolling(fast_window).mean()
-    slow_ma = close.rolling(slow_window).mean()
-
-    entries = (fast_ma > slow_ma) & (fast_ma.shift(1) <= slow_ma.shift(1))
-    exits = (fast_ma < slow_ma) & (fast_ma.shift(1) >= slow_ma.shift(1))
-
     pos = 0
     entry_price = 0.0
     entry_time = None
@@ -101,8 +104,8 @@ def simulate_sma_month(
     trades: list[dict[str, Any]] = []
 
     for i, (ts, row) in enumerate(ohlcv.iterrows()):
-        is_entry = bool(entries.iloc[i])
-        is_exit = bool(exits.iloc[i])
+        is_entry = bool(entries.iloc[i]) if i < len(entries) else False
+        is_exit = bool(exits.iloc[i]) if i < len(exits) else False
         curr_price = float(row["close"])
 
         if is_entry and pos == 0:
@@ -146,14 +149,12 @@ def simulate_sma_month(
             })
             pos = 0
 
-    trades_df = pd.DataFrame(trades) if trades else pd.DataFrame()
     total_trades = len(trades)
     
     if total_trades > 0:
         win_trades = [t for t in trades if t["is_win"]]
         loss_trades = [t for t in trades if not t["is_win"]]
         win_rate = len(win_trades) / total_trades
-        total_pnl = sum(t["pnl"] for t in trades)
         total_return = (np.prod([1.0 + t["return_pct"] for t in trades])) - 1.0
 
         gross_profit = sum(t["pnl"] for t in win_trades) if win_trades else 0.0
@@ -174,7 +175,6 @@ def simulate_sma_month(
         sharpe = float((np.mean(rets) / std_ret) * np.sqrt(72576 / max(1, len(ohlcv) / total_trades))) if std_ret > 0 else 0.0
     else:
         win_rate = 0.0
-        total_pnl = 0.0
         total_return = 0.0
         profit_factor = 0.0
         max_dd = 0.0
@@ -205,12 +205,10 @@ def run_single_month(
     strategy_name: str,
     symbol: str,
     timeframe: str,
-    fast_window: int,
-    slow_window: int,
     init_cash: float = 10000.0,
     fees: float = 0.001,
 ) -> dict[str, Any]:
-    """Worker task: Load single-month slice and compute simulation."""
+    """Worker task: Load single-month slice, invoke strategy via registry, and compute simulation."""
     con = duckdb.connect(db_path, read_only=True)
     query = f"""
         SELECT timestamp AS ts, open, high, low, close, volume
@@ -235,13 +233,18 @@ def run_single_month(
     df_raw["ts"] = pd.to_datetime(df_raw["ts"], utc=True)
     ohlcv = df_raw.set_index("ts").sort_index()
 
+    # Dynamic strategy retrieval via registry
+    strategy = get_strategy(strategy_name)
+    version = getattr(strategy, "version", "1.0.0")
+
+    # Strategy produces signals based on its own internal configurations
+    entries, exits = strategy.generate_signals(ohlcv)
+
     params = {
         "strategy_name": strategy_name,
-        "strategy_version": "1.0.0",
+        "strategy_version": version,
         "symbol": symbol,
         "timeframe": timeframe,
-        "fast_window": fast_window,
-        "slow_window": slow_window,
         "start_date": window_start.strftime("%Y-%m-%d %H:%M:%S"),
         "end_date": window_end.strftime("%Y-%m-%d %H:%M:%S"),
         "trade_type": "EXIT_TRADE",
@@ -254,10 +257,10 @@ def run_single_month(
         "slippage_pct": 0.0,
     }
 
-    metrics, trades = simulate_sma_month(
+    metrics, trades = simulate_signals(
         ohlcv=ohlcv,
-        fast_window=fast_window,
-        slow_window=slow_window,
+        entries=entries,
+        exits=exits,
         init_cash=init_cash,
         fees=fees,
     )
@@ -528,6 +531,17 @@ def main() -> None:
         description="1Mnbt: Concurrent 1-Month Backtest Runner with 4 workers"
     )
     parser.add_argument(
+        "--strategy",
+        "-s",
+        default="sma_cross",
+        help="Registered strategy name (default: sma_cross)",
+    )
+    parser.add_argument(
+        "--list-strategies",
+        action="store_true",
+        help="List all registered strategies and exit",
+    )
+    parser.add_argument(
         "--db",
         default="Shared/Data/ohlcv_eruusd.duckdb",
         help="Path to DuckDB OHLCV database (default: Shared/Data/ohlcv_eruusd.duckdb)",
@@ -538,11 +552,6 @@ def main() -> None:
         help="OHLCV table name (default: ohlcv)",
     )
     parser.add_argument(
-        "--strategy",
-        default="sma_cross",
-        help="Strategy name (default: sma_cross)",
-    )
-    parser.add_argument(
         "--symbol",
         default="EURUSD",
         help="Symbol ticker (default: EURUSD)",
@@ -551,18 +560,6 @@ def main() -> None:
         "--timeframe",
         default="5m",
         help="Candle timeframe (default: 5m)",
-    )
-    parser.add_argument(
-        "--fast-window",
-        type=int,
-        default=10,
-        help="Fast SMA window (default: 10)",
-    )
-    parser.add_argument(
-        "--slow-window",
-        type=int,
-        default=50,
-        help="Slow SMA window (default: 50)",
     )
     parser.add_argument(
         "--workers",
@@ -580,8 +577,23 @@ def main() -> None:
     args = parser.parse_args()
 
     console = Console()
+
+    if args.list_strategies:
+        available = list_strategies()
+        console.print("[bold cyan]Available Strategies in Registry:[/bold cyan]")
+        for s in available:
+            console.print(f"  • [bold yellow]{s}[/bold yellow]")
+        return
+
+    # Validate strategy exists
+    try:
+        strat = get_strategy(args.strategy)
+    except KeyError as err:
+        console.print(f"[red]Error: {err}[/red]")
+        return
+
     console.print(f"[bold cyan]1Mnbt: High-Performance 1-Month Backtest Runner[/bold cyan]")
-    console.print(f"  • Strategy   : [bold yellow]{args.strategy}[/bold yellow] (Fast: {args.fast_window}, Slow: {args.slow_window})")
+    console.print(f"  • Strategy   : [bold yellow]{strat.name}[/bold yellow] (v{strat.version})")
     console.print(f"  • Symbol/TF  : {args.symbol} / {args.timeframe}")
     console.print(f"  • Target DB  : {args.db}")
     console.print(f"  • Month      : [bold cyan]{args.month}[/bold cyan]")
@@ -602,7 +614,7 @@ def main() -> None:
     start_time = time.time()
     results: list[dict[str, Any]] = []
 
-    # Run in parallel with ProcessPoolExecutor (4 workers)
+    # Run in parallel with ProcessPoolExecutor
     with ProcessPoolExecutor(max_workers=args.workers) as executor:
         future_to_month = {
             executor.submit(
@@ -615,8 +627,6 @@ def main() -> None:
                 args.strategy,
                 args.symbol,
                 args.timeframe,
-                args.fast_window,
-                args.slow_window,
             ): label
             for label, w_start, w_end in windows
         }

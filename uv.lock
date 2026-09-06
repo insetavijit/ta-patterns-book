@@ -918,6 +918,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pandas-ta-classic"
+version = "0.6.52"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pandas" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/88/439fb35fe42bf458623e21e4e7bc62408e4f0cd4cd9ac387806510db2e01/pandas_ta_classic-0.6.52-py3-none-any.whl", hash = "sha256:53956dde8969b8a1ac1cda7ee514c74b4af65d802387353814814ac2e1d949e2", size = 396905, upload-time = "2026-06-24T15:23:48.248Z" },
+]
+
+[[package]]
 name = "parso"
 version = "0.8.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1499,6 +1511,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "mplfinance" },
     { name = "pandas" },
+    { name = "pandas-ta-classic" },
     { name = "plotly" },
     { name = "pyyaml" },
     { name = "rich" },
@@ -1515,6 +1528,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "mplfinance", specifier = ">=0.12.10b0" },
     { name = "pandas", specifier = ">=3.0.5" },
+    { name = "pandas-ta-classic", specifier = ">=0.6.52" },
     { name = "plotly", specifier = "<6.0.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "rich", specifier = ">=15.0.0" },
