@@ -1130,6 +1130,97 @@ def cmd_pandas(conn, args) -> dict:
     return make_envelope("pandas", True, result_data, None)
 
 
+def cmd_resample(conn, args) -> dict:
+    """Resample an OHLCV table/view to a target timeframe (e.g. 5m, 15m, 1h) and create a DuckDB VIEW."""
+    src_table = args.src_table
+    timeframe = args.timeframe.strip().lower()
+    schema = quote_ident(getattr(args, "schema", None) or DEFAULT_SCHEMA)
+    
+    # Parse timeframe interval
+    tf_map = {
+        "1m": "1 minute",
+        "5m": "5 minutes",
+        "15m": "15 minutes",
+        "30m": "30 minutes",
+        "1h": "1 hour",
+        "4h": "4 hours",
+        "1d": "1 day",
+    }
+    interval_str = tf_map.get(timeframe)
+    if not interval_str:
+        # Check if user passed something like 5m or 10 minutes
+        if timeframe.endswith("m"):
+            interval_str = f"{timeframe[:-1]} minutes"
+        elif timeframe.endswith("h"):
+            interval_str = f"{timeframe[:-1]} hours"
+        elif timeframe.endswith("d"):
+            interval_str = f"{timeframe[:-1]} days"
+        else:
+            interval_str = timeframe
+
+    # View name: user specified or default {src_table}_{timeframe}_view
+    view_name = args.view or f"{src_table}_{timeframe}"
+    view_ident = quote_ident(view_name)
+    src_ident = quote_ident(src_table)
+
+    # Inspect source columns to find timestamp and OHLCV names
+    try:
+        col_rows = conn.execute(f"PRAGMA table_info({schema}.{src_ident})").fetchall()
+        cols = {r[1].lower(): r[1] for r in col_rows}
+    except duckdb.Error as exc:
+        raise ToolError(f"Failed to inspect source table '{src_table}': {exc}", EXIT_SQL_ERROR) from exc
+
+    ts_col = cols.get("timestamp") or cols.get("ts") or cols.get("time") or cols.get("date")
+    o_col = cols.get("open")
+    h_col = cols.get("high")
+    l_col = cols.get("low")
+    c_col = cols.get("close")
+    v_col = cols.get("volume") or cols.get("vol")
+
+    if not (ts_col and o_col and h_col and l_col and c_col):
+        raise ToolError(
+            f"Source table '{src_table}' must contain timestamp, open, high, low, close columns. Found: {list(cols.keys())}",
+            EXIT_VALIDATION_ERROR,
+        )
+
+    ts_id = quote_ident(ts_col)
+    o_id = quote_ident(o_col)
+    h_id = quote_ident(h_col)
+    l_id = quote_ident(l_col)
+    c_id = quote_ident(c_col)
+    vol_expr = f", SUM({quote_ident(v_col)}) AS volume" if v_col else ""
+
+    create_view_sql = f"""
+    CREATE OR REPLACE VIEW {schema}.{view_ident} AS
+    SELECT
+        time_bucket(INTERVAL '{interval_str}', {ts_id}) AS timestamp,
+        arg_min({o_id}, {ts_id}) AS open,
+        MAX({h_id}) AS high,
+        MIN({l_id}) AS low,
+        arg_max({c_id}, {ts_id}) AS close{vol_expr}
+    FROM {schema}.{src_ident}
+    GROUP BY time_bucket(INTERVAL '{interval_str}', {ts_id})
+    ORDER BY timestamp ASC;
+    """
+
+    # Ensure writable connection if needed
+    try:
+        conn.execute(create_view_sql)
+        row_count = conn.execute(f"SELECT COUNT(*) FROM {schema}.{view_ident}").fetchone()[0]
+    except duckdb.Error as exc:
+        raise ToolError(f"Error creating resampled view '{view_name}': {exc}", EXIT_SQL_ERROR) from exc
+
+    result_data = {
+        "view_name": view_name,
+        "src_table": src_table,
+        "timeframe": timeframe,
+        "interval": interval_str,
+        "row_count": row_count,
+        "sql": create_view_sql.strip(),
+    }
+    return make_envelope("resample", True, result_data, None)
+
+
 def cmd_health_check(conn, args) -> dict:
     """Verify the file opens as a valid, queryable DuckDB database."""
     try:
@@ -1381,6 +1472,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_schema_flag(p)
     p.set_defaults(func=cmd_pandas)
 
+    p = sub.add_parser("resample", help="Resample an OHLCV table/view to a target timeframe (e.g. 5m, 15m, 1h) and create a DuckDB VIEW.")
+    p.add_argument("--src-table", required=True, help="Source 1-minute OHLCV table/view name.")
+    p.add_argument("--resample", dest="timeframe", required=True, help="Target timeframe to resample to (e.g. 5m, 15m, 1h, 1d).")
+    p.add_argument("--view", default=None, help="Name of the VIEW to create (defaults to {src_table}_{timeframe}).")
+    _add_schema_flag(p)
+    p.set_defaults(func=cmd_resample)
+
     p = sub.add_parser("health-check", help="Verify the file is a valid, queryable DuckDB database.")
     p.set_defaults(func=cmd_health_check)
 
@@ -1422,9 +1520,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     conn = None
     try:
         if command_name not in NO_DB_REQUIRED_COMMANDS:
-            # 'health-check' still needs a connection to be useful; every other
-            # data-bearing command needs one, so open it uniformly here.
-            conn = connect(args.db, read_only=not args.write)
+            # 'resample' creates or replaces a VIEW so it needs write permissions.
+            read_only_mode = (not args.write) if command_name != "resample" else False
+            conn = connect(args.db, read_only=read_only_mode)
         envelope = args.func(conn, args)
     except ToolError as exc:
         envelope = make_envelope(
