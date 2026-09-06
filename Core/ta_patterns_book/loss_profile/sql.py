@@ -39,6 +39,7 @@ def build_duration_query(
     losses_only: bool = False,
     wins_only: bool = False,
     pattern_filter: str = None,
+    duration_col: str = "duration_candel",
 ) -> str:
     where_clauses = []
     if losses_only:
@@ -62,15 +63,15 @@ def build_duration_query(
     return f"""
         SELECT 
             CASE 
-                WHEN t.duration_candel = 1 THEN '1 candle (5m)'
-                WHEN t.duration_candel = 2 THEN '2 candles (10m)'
-                WHEN t.duration_candel = 3 THEN '3 candles (15m)'
-                WHEN t.duration_candel = 4 THEN '4 candles (20m)'
-                WHEN t.duration_candel = 5 THEN '5 candles (25m)'
-                WHEN t.duration_candel BETWEEN 6 AND 10 THEN '6-10 candles (30-50m)'
-                WHEN t.duration_candel BETWEEN 11 AND 15 THEN '11-15 candles (55-75m)'
-                WHEN t.duration_candel BETWEEN 16 AND 30 THEN '16-30 candles (80-150m)'
-                WHEN t.duration_candel BETWEEN 31 AND 60 THEN '31-60 candles (155-300m)'
+                WHEN t.{duration_col} = 1 THEN '1 candle (5m)'
+                WHEN t.{duration_col} = 2 THEN '2 candles (10m)'
+                WHEN t.{duration_col} = 3 THEN '3 candles (15m)'
+                WHEN t.{duration_col} = 4 THEN '4 candles (20m)'
+                WHEN t.{duration_col} = 5 THEN '5 candles (25m)'
+                WHEN t.{duration_col} BETWEEN 6 AND 10 THEN '6-10 candles (30-50m)'
+                WHEN t.{duration_col} BETWEEN 11 AND 15 THEN '11-15 candles (55-75m)'
+                WHEN t.{duration_col} BETWEEN 16 AND 30 THEN '16-30 candles (80-150m)'
+                WHEN t.{duration_col} BETWEEN 31 AND 60 THEN '31-60 candles (155-300m)'
                 ELSE '60+ candles (> 300m)'
             END AS duration_bracket,
             COUNT(*) AS "number of trades",
@@ -78,8 +79,8 @@ def build_duration_query(
             COUNT(CASE WHEN t.pnl <= 0 THEN 1 END) AS loss,
             ROUND(COUNT(CASE WHEN t.pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 2) AS "win%",
             SUM(t.pnl) AS raw_pnl,
-            MIN(t.duration_candel) AS min_dur,
-            MAX(t.duration_candel) AS max_dur
+            MIN(t.{duration_col}) AS min_dur,
+            MAX(t.{duration_col}) AS max_dur
         FROM {from_clause}
         {where_str}
         GROUP BY duration_bracket

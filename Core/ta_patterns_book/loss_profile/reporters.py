@@ -225,7 +225,16 @@ def generate_duration_table(
     output_fmt: str = "text",
 ):
     con = get_db_connection(db_path, read_only=True)
-    query = build_duration_query(view_name=view_name, losses_only=losses_only, wins_only=wins_only, pattern_filter=pattern_filter)
+    cols = [col[0].lower() for col in con.execute(f'DESCRIBE "{view_name}"').fetchall()]
+    duration_col = "holding_bars" if "holding_bars" in cols and "duration_candel" not in cols else "duration_candel"
+    
+    query = build_duration_query(
+        view_name=view_name,
+        losses_only=losses_only,
+        wins_only=wins_only,
+        pattern_filter=pattern_filter,
+        duration_col=duration_col,
+    )
     df_dur = con.execute(query).df()
     con.close()
 
