@@ -31,12 +31,13 @@ import yaml
 
 # Ensure Core is in Python path for strategy registry resolution
 _REPO_ROOT = Path(__file__).resolve().parent
-if _REPO_ROOT.name == "Utils":
+if _REPO_ROOT.name in ("Utils", "Notebooks"):
     _REPO_ROOT = _REPO_ROOT.parent
 if str(_REPO_ROOT / "Core") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "Core"))
 
 from strategies.registry import get_strategy, list_strategies
+from ta_patterns_book.data.resample import resample_ohlcv
 
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("1Ybt")
@@ -247,6 +248,10 @@ def run_single_month(
 
     df_raw["ts"] = pd.to_datetime(df_raw["ts"], utc=True)
     ohlcv = df_raw.set_index("ts").sort_index()
+
+    # Automatically resample if timeframe is requested and differs from native data resolution
+    if timeframe:
+        ohlcv = resample_ohlcv(ohlcv, target_timeframe=timeframe)
 
     strategy = get_strategy(strategy_name)
     version = getattr(strategy, "version", "1.0.0")

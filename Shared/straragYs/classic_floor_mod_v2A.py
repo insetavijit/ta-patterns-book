@@ -11,13 +11,13 @@ class ClassicFloorModV2:
 
     def generate_signals(self, ohlcv: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
         """
-        ClassicFloorModV2: Streamlined strategy using pandas_ta_classic for calculations,
-        focusing purely on raw trade execution and strategy core logic.
+        ClassicFloorModV2 (exp-3): Updated strategy in exp-3 with 3-candle pattern state classification
+        and dynamic DR-DR-DR delay logic.
         - Core Pivot math: Pivot, S1, R1 (20-period lookback, shifted by 1)
-        - 2-Candle Delay Entry
+        - Scheduled Entry at Bar +3
+        - DR-DR-DR Pattern Check: If pre-entry 3-candle setup (entry_1) is DR-DR-DR, delay entry by 3 additional candles
         - Dynamic Stop Loss (lower of signal & entry body low minus half R1-S1 range)
         - Take Profit at frozen R1
-        - Clean raw trade execution table output.
         """
         if ohlcv.empty:
             empty_series = pd.Series(dtype=bool)
@@ -164,29 +164,29 @@ class ClassicFloorModV2:
                     tp_series[i] = target_price
                     entries.iloc[i] = True
 
-                # Check intrabar exit on entry bar
-                target_hit = high_arr[i] >= target_price
-                stop_hit = low_arr[i] <= stop_price
-                if target_hit or stop_hit:
-                    exits.iloc[i] = True
-                    in_trade = False
-                    exit_price = target_price if target_hit else stop_price
-                    pnl = exit_price - entry_price_val
-                    pnl_pct = (pnl / entry_price_val) * 100.0
+                    # Check intrabar exit on entry bar
+                    target_hit = high_arr[i] >= target_price
+                    stop_hit = low_arr[i] <= stop_price
+                    if target_hit or stop_hit:
+                        exits.iloc[i] = True
+                        in_trade = False
+                        exit_price = target_price if target_hit else stop_price
+                        pnl = exit_price - entry_price_val
+                        pnl_pct = (pnl / entry_price_val) * 100.0
 
-                    exit_price_series[i] = exit_price
-                    realized_pnl_series[i] = pnl
-                    realized_pnl_pct_series[i] = pnl_pct
-                    is_win_series[i] = 1 if target_hit else -1
-                    exit_reason_series[i] = "TP" if target_hit else "SL"
+                        exit_price_series[i] = exit_price
+                        realized_pnl_series[i] = pnl
+                        realized_pnl_pct_series[i] = pnl_pct
+                        is_win_series[i] = 1 if target_hit else -1
+                        exit_reason_series[i] = "TP" if target_hit else "SL"
 
-                    signal_bar = None
-                    setup_s1 = None
-                    setup_r1 = None
-                    signal_body_low = None
-                    stop_price = None
-                    target_price = None
-                    entry_price_val = None
+                        signal_bar = None
+                        setup_s1 = None
+                        setup_r1 = None
+                        signal_body_low = None
+                        stop_price = None
+                        target_price = None
+                        entry_price_val = None
 
         # Build Clean Strategy Trade Table
         trades_df = pd.DataFrame(index=ohlcv.index)
@@ -217,28 +217,3 @@ class ClassicFloorModV2:
         exits.index = ohlcv.index
 
         return entries, exits, trades_df
-
-
-if __name__ == "__main__":
-    np.random.seed(42)
-    periods = 50
-    dates = pd.date_range("2026-01-01 09:00", periods=periods, freq="min")
-
-    prices = [1.1000] * 25
-    prices += [1.0800, 1.0805, 1.0810, 1.0815, 1.0820, 1.0830, 1.0840, 1.0850, 1.0860, 1.0870, 1.0880, 1.0890, 1.0900, 1.0910, 1.0920]
-    prices += [1.0930] * (periods - len(prices))
-
-    df_dummy = pd.DataFrame({
-        "open": np.array(prices) - 0.0001,
-        "high": np.array(prices) + 0.0002,
-        "low": np.array(prices) - 0.0002,
-        "close": np.array(prices),
-        "volume": 1000
-    }, index=dates)
-
-    strat = ClassicFloorModV2()
-    entries, exits, trades_df = strat.generate_signals(df_dummy)
-
-    print("=== CLASSIC FLOOR MOD V2 (PURE STRATEGY WITH PANDAS-TA-CLASSIC) ===")
-    print(f"Total Entries: {entries.sum()}, Exits: {exits.sum()}\n")
-    print(trades_df.dropna(subset=['sl_price']).head(10))
