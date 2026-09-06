@@ -5,15 +5,18 @@ description = "Technical Analysis Pattern Recognition Book, DuckDB Pattern Memor
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "click>=8.1",
     "duckdb>=1.5.5",
     "matplotlib>=3.11.1",
     "mplfinance>=0.12.10b0",
     "pandas>=3.0.5",
+    "plotly<6.0.0",
     "pyyaml>=6.0.3",
     "rich>=15.0.0",
     "seaborn>=0.13.2",
     "ta-patterns>=1.1.1",
     "tabulate>=0.10.0",
+    "vectorbt>=0.26.2",
 ]
 
 [project.scripts]
@@ -22,6 +25,7 @@ loss-profile = "ta_patterns_book.loss_profile.cli:main"
 trade-book-charts = "trade_book_charts.cli:main"
 trade-view = "trade_book_charts.cli:main"
 tradebook-tool = "trade_book_charts.cli:main"
+vbtspike = "vbtspike.cli:cli"
 
 [build-system]
 requires = ["setuptools>=61.0"]

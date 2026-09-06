@@ -1,0 +1,8 @@
+vbtspike:
+  duckdb_path: "Shared/Data/ohlcv_dump.duckdb"
+  results_dir: "Shared/OUTs"
+  max_cache_age_default: "24h"
+  log_level: "INFO"
+  backup:
+    dir: "backups"
+    keep_last: 5

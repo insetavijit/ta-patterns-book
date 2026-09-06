@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv
 __trash
+.tmp
 Shared/INPs
 
 # Generated output assets & images

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+
+# uv
+.uv/
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# Backups (local snapshots only — not source-controlled)
+backups/*.duckdb
+
+# Env
+.env
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Trash & Temp
+__trash/
+.tmp/
