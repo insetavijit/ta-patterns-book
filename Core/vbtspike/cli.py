@@ -375,5 +375,153 @@ def backup(db: str | None, config: str | None) -> None:
         sys.exit(1)
 
 
+# ---------------------------------------------------------------------------
+# clean command
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.option(
+    "--db", "--duckdb-path", default="Shared/Data/ohlcv_eruusd.duckdb",
+    help="Path to DuckDB database file (defaults to Shared/Data/ohlcv_eruusd.duckdb).",
+)
+@click.option(
+    "--yes", "-y", is_flag=True, default=False,
+    help="Confirm removal without prompting (execution mode).",
+)
+@click.option(
+    "--dry-run", is_flag=True, default=False,
+    help="Perform verification only and show items that would be removed.",
+)
+def clean(db: str, yes: bool, dry_run: bool) -> None:
+    """Verify and remove all trade tables and analytical views for clean backtests.
+
+    Preserves raw/resampled candle data (e.g. 'ohlcv') and removes backtest
+    artifacts (test_runs, trades, batches, and all strategy-scoped views).
+    """
+    import duckdb
+    from rich.console import Console
+    from rich.table import Table
+
+    db_path = Path(db)
+    if not db_path.exists():
+        click.echo(f"ERROR: Database file not found: {db_path}", err=True)
+        sys.exit(1)
+
+    con = duckdb.connect(str(db_path), read_only=True)
+
+    # Discover all tables and views
+    objects = con.execute("""
+        SELECT table_name, table_type 
+        FROM information_schema.tables 
+        WHERE table_schema = 'main'
+        ORDER BY table_type, table_name
+    """).fetchall()
+
+    con.close()
+
+    # Known backtest physical tables to remove
+    target_tables = {"trades", "test_runs", "batches"}
+
+    # Canonical & pattern-matched views to remove
+    # Note: views ending in _trades or _monthly, or global analytical views
+    vbt_views = {
+        "all_trades", "strategy_performance", "trade_book",
+        "backtest_run", "run_params", "comparative", "coverage", "trades"
+    }
+
+    views_to_drop = []
+    tables_to_drop = []
+    preserved_objects = []
+
+    for name, obj_type in objects:
+        obj_lower = name.lower()
+        if obj_type.lower() == "view":
+            if (
+                obj_lower in vbt_views
+                or obj_lower.endswith("_trades")
+                or obj_lower.endswith("_monthly")
+            ):
+                views_to_drop.append(name)
+            else:
+                preserved_objects.append((name, "VIEW"))
+        else:
+            if obj_lower in target_tables:
+                tables_to_drop.append(name)
+            else:
+                preserved_objects.append((name, "TABLE"))
+
+    console = Console()
+    console.print(f"\n[bold cyan]vbtspike Clean: Database Inspection & Verification[/bold cyan]")
+    console.print(f"Target Database: [bold]{db_path}[/bold]\n")
+
+    if not views_to_drop and not tables_to_drop:
+        console.print("[green]✓ Database is already clean. No backtest tables or views found.[/green]\n")
+        return
+
+    # Render table of items targeted for removal
+    table = Table(title="Items Scheduled for Removal", box=None, header_style="bold red")
+    table.add_column("Type", style="bold")
+    table.add_column("Name")
+    table.add_column("Current Row Count", justify="right")
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    for v in views_to_drop:
+        try:
+            cnt = con.execute(f'SELECT COUNT(*) FROM "{v}"').fetchone()[0]
+            cnt_str = f"{cnt:,}"
+        except Exception:
+            cnt_str = "-"
+        table.add_row("VIEW", v, cnt_str)
+
+    for t in tables_to_drop:
+        try:
+            cnt = con.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+            cnt_str = f"{cnt:,}"
+        except Exception:
+            cnt_str = "-"
+        table.add_row("TABLE", t, cnt_str)
+    con.close()
+
+    console.print(table)
+
+    # Render preserved items
+    if preserved_objects:
+        p_table = Table(title="\nPreserved Objects (Will NOT be touched)", box=None, header_style="bold green")
+        p_table.add_column("Type", style="bold")
+        p_table.add_column("Name")
+        con = duckdb.connect(str(db_path), read_only=True)
+        for name, o_type in preserved_objects:
+            try:
+                cnt = con.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
+                cnt_str = f"{cnt:,} rows"
+            except Exception:
+                cnt_str = "-"
+            p_table.add_row(o_type, name, cnt_str)
+        con.close()
+        console.print(p_table)
+
+    if dry_run:
+        console.print(f"\n[bold yellow]Dry-run complete. Found {len(views_to_drop)} view(s) and {len(tables_to_drop)} table(s) to remove.[/bold yellow]\n")
+        return
+
+    if not yes:
+        if not click.confirm(f"\nAre you sure you want to remove these {len(views_to_drop) + len(tables_to_drop)} object(s)?", default=False):
+            console.print("[yellow]Clean operation aborted by user.[/yellow]\n")
+            return
+
+    # Execute removal
+    con = duckdb.connect(str(db_path), read_only=False)
+    for v in views_to_drop:
+        con.execute(f'DROP VIEW IF EXISTS "{v}"')
+
+    for t in tables_to_drop:
+        con.execute(f'DROP TABLE IF EXISTS "{t}"')
+
+    con.close()
+
+    console.print(f"\n[bold green]✓ Successfully removed {len(views_to_drop)} view(s) and {len(tables_to_drop)} table(s). Database is ready for fresh runs![/bold green]\n")
+
+
 if __name__ == "__main__":
     cli()
+
