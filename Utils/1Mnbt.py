@@ -328,6 +328,142 @@ def ensure_db_schema(con: duckdb.DuckDBPyConnection) -> None:
     """)
 
 
+def _safe_view_name(strategy_name: str) -> str:
+    """Sanitise a strategy name into a valid DuckDB identifier.
+
+    Replaces any character that is not alphanumeric or underscore with '_'.
+    Prevents SQL injection when interpolating strategy names into view DDL.
+
+    Examples:
+        'sma_cross'            → 'sma_cross'
+        'classic_floor_mod_v2' → 'classic_floor_mod_v2'
+        'my-strategy.v1'       → 'my_strategy_v1'
+    """
+    import re
+    return re.sub(r"[^a-zA-Z0-9_]", "_", strategy_name)
+
+
+def create_strategy_views(
+    con: duckdb.DuckDBPyConnection,
+    strategy_name: str,
+) -> None:
+    """Auto-generate or refresh all four DuckDB views after a strategy persist.
+
+    Creates:
+      - {strategy_name}_trades      Per-trade log for this strategy only.
+      - {strategy_name}_monthly     Monthly performance summary for this strategy.
+      - all_trades                  Combined trade book across all strategies.
+      - strategy_performance        Cross-strategy monthly leaderboard by Sharpe.
+
+    All views use CREATE OR REPLACE to guarantee they stay current on every run.
+    The strategy name is sanitised before identifier interpolation.
+
+    Args:
+        con:           Open, writable DuckDB connection.
+        strategy_name: Strategy name as stored in test_runs.strategy_name.
+    """
+    safe = _safe_view_name(strategy_name)
+
+    # View 1 — per-strategy individual trade log
+    con.execute(f"""
+        CREATE OR REPLACE VIEW {safe}_trades AS
+        SELECT
+            t.vbt_trade_id,
+            t.fingerprint,
+            r.strategy_name,
+            r.symbol,
+            r.timeframe,
+            r.start_date        AS window_start,
+            r.end_date          AS window_end,
+            t.direction,
+            t.status,
+            t.entry_time,
+            t.exit_time,
+            t.entry_price,
+            t.exit_price,
+            t.size,
+            t.entry_fees,
+            t.exit_fees,
+            t.pnl,
+            t.return_pct,
+            t.holding_bars,
+            t.holding_seconds,
+            t.is_win
+        FROM trades t
+        JOIN test_runs r ON t.fingerprint = r.fingerprint
+        WHERE r.strategy_name = '{strategy_name}'
+    """)
+
+    # View 2 — per-strategy monthly performance summary
+    con.execute(f"""
+        CREATE OR REPLACE VIEW {safe}_monthly AS
+        SELECT
+            strftime(r.start_date, '%Y-%m')     AS month,
+            r.strategy_name,
+            r.symbol,
+            r.timeframe,
+            r.start_date,
+            r.end_date,
+            r.total_return,
+            r.benchmark_return,
+            r.sharpe_ratio,
+            r.max_drawdown,
+            r.win_rate,
+            r.profit_factor,
+            r.total_trades
+        FROM test_runs r
+        WHERE r.strategy_name = '{strategy_name}'
+        ORDER BY r.start_date
+    """)
+
+    # View 3 — global combined trade book across all strategies
+    con.execute("""
+        CREATE OR REPLACE VIEW all_trades AS
+        SELECT
+            t.vbt_trade_id,
+            t.fingerprint,
+            r.strategy_name,
+            r.symbol,
+            r.timeframe,
+            t.direction,
+            t.entry_time,
+            t.exit_time,
+            t.entry_price,
+            t.exit_price,
+            t.pnl,
+            t.return_pct,
+            t.holding_bars,
+            t.holding_seconds,
+            t.is_win
+        FROM trades t
+        JOIN test_runs r ON t.fingerprint = r.fingerprint
+    """)
+
+    # View 4 — cross-strategy monthly leaderboard ranked by Sharpe
+    con.execute("""
+        CREATE OR REPLACE VIEW strategy_performance AS
+        SELECT
+            strftime(r.start_date, '%Y-%m')     AS month,
+            r.strategy_name,
+            r.symbol,
+            r.total_return,
+            r.benchmark_return,
+            r.sharpe_ratio,
+            r.max_drawdown,
+            r.win_rate,
+            r.profit_factor,
+            r.total_trades,
+            RANK() OVER (
+                PARTITION BY strftime(r.start_date, '%Y-%m')
+                ORDER BY r.sharpe_ratio DESC NULLS LAST
+            ) AS sharpe_rank
+        FROM test_runs r
+        ORDER BY month, sharpe_rank
+    """)
+
+    logger.info("Views refreshed for strategy '%s'", strategy_name)
+
+
 def persist_results(
     db_path: str | Path,
     results: list[dict[str, Any]],
@@ -375,6 +511,14 @@ def persist_results(
                 t["size"], t["entry_fees"], t["exit_fees"], t["pnl"], t["return_pct"],
                 t["holding_bars"], t["holding_seconds"], t["is_win"]
             ])
+
+    # Auto-generate / refresh strategy-scoped views after all writes
+    strategy_name = next(
+        (r["params"]["strategy_name"] for r in results if r["status"] == "SUCCESS"),
+        None,
+    )
+    if strategy_name:
+        create_strategy_views(con, strategy_name)
 
     con.close()
 

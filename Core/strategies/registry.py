@@ -12,10 +12,13 @@ if TYPE_CHECKING:
     from .base import StrategyProtocol
 
 from .sma_cross import SmaCrossStrategy
+from .classic_floor_v2 import ClassicFloorV2Strategy
 
 _REGISTRY: dict[str, "StrategyProtocol"] = {
-    "sma_cross": SmaCrossStrategy(),
+    "sma_cross":            SmaCrossStrategy(),
+    "classic_floor_mod_v2": ClassicFloorV2Strategy(),
 }
+
 
 
 def get_strategy(name: str) -> "StrategyProtocol":
