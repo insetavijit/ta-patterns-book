@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+__trash
+.tmp
+Shared/INPs
+
+# Generated output assets & images
+*.png
+*.jpg
+*.jpeg
+*.svg
+
+# Databases & data files (Ignore by default)
+*.duckdb
+*.duckdb.wal
+*.csv
+*.parquet
+
+# EXCEPT data files inside Shared/Data/
+!Shared/Data/
+!Shared/Data/**

@@ -1,6 +1,7 @@
 """Single Orchestration File for Loss Profiler reporting & display formatting."""
 
 import os
+import re
 import duckdb
 import pandas as pd
 from rich.console import Console
@@ -71,6 +72,9 @@ def generate_monthly_table(
     if has_month:
         months_df = con.execute(f'SELECT month_table, MIN(entry_time) as min_t FROM "{view_name}" GROUP BY month_table ORDER BY min_t ASC;').df()
         available_months = months_df['month_table'].tolist() if not months_df.empty else []
+    elif "entry_time" in cols_df.columns:
+        months_df = con.execute(f"SELECT STRFTIME(CAST(entry_time AS TIMESTAMP), '%Y-%m') as m, MIN(entry_time) as min_t FROM \"{view_name}\" GROUP BY m ORDER BY min_t ASC;").df()
+        available_months = months_df['m'].tolist() if not months_df.empty else []
 
     target_month = None
     if month_filter and month_filter != "all" and available_months:
@@ -228,12 +232,15 @@ def generate_duration_table(
     cols = [col[0].lower() for col in con.execute(f'DESCRIBE "{view_name}"').fetchall()]
     duration_col = "holding_bars" if "holding_bars" in cols and "duration_candel" not in cols else "duration_candel"
     
+    has_pattern_col = ("entry_1" in cols) or ("entry_2" in cols)
+    
     query = build_duration_query(
         view_name=view_name,
         losses_only=losses_only,
         wins_only=wins_only,
         pattern_filter=pattern_filter,
         duration_col=duration_col,
+        has_pattern_col=has_pattern_col,
     )
     df_dur = con.execute(query).df()
     con.close()
@@ -377,6 +384,11 @@ def generate_distribution_table(
     con = get_db_connection(db_path, read_only=True)
     cols_df = con.execute(f'SELECT * FROM "{view_name}" LIMIT 0;').df()
     has_pattern_col = pattern_col in cols_df.columns
+
+    if pattern_filter:
+        cols_lower = [c.lower() for c in cols_df.columns]
+        if "holding_bars" in cols_lower and "duration_candel" not in cols_lower:
+            pattern_filter = re.sub(r"\b(duration_candel|duration|dur)\b", "holding_bars", pattern_filter)
 
     query = build_distribution_query(
         view_name=view_name,

@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--db", type=str, default=None, help="Explicit path to DuckDB database file")
     parser.add_argument("--primary", action="store_true", help="Use primary database defined in Shared/cnf.yaml")
     parser.add_argument("--secondary", "--secoundary", action="store_true", help="Use secondary database defined in Shared/cnf.yaml")
-    parser.add_argument("--view", type=str, default="trades", help="Source view/table (default: trades)")
+    parser.add_argument("--view", type=str, default=None, required=True, help="Source view/table name (Required)")
     parser.add_argument("--monthly", "--month", "--mnth", nargs="?", const="all", type=str, default=None, help="Display monthly performance breakdown (Deprecated: use --dist monthly)")
     parser.add_argument("--weekly", "--wk", action="store_true", help="Display weekly performance breakdown table (Deprecated: use --dist weekly)")
     parser.add_argument("--duration-group", "--dur-group", action="store_true", help="Display duration bracket performance breakdown table (Deprecated: use --dist duration)")
@@ -42,10 +42,36 @@ def main():
     parser.add_argument("--output", "--fmt", "-o", choices=["text", "markdown", "md"], default="text", help="Output format: 'text' (default) or 'markdown'/'md'")
 
     args = parser.parse_args()
-    
-    # Resolve database selection: --db <path>, --secondary, or --primary (default)
+
+    # 1. Validate explicit database specification
+    has_db_flag = bool(args.primary or args.secondary or args.db)
+    if not has_db_flag:
+        parser.error("Database location must be explicitly specified via --primary, --secondary (or --secoundary), or --db <path>.")
+
+    if args.primary and args.secondary:
+        parser.error("Cannot specify both --primary and --secondary simultaneously.")
+
+    # 2. Validate view specification
+    if not args.view:
+        parser.error("A view/table name must be explicitly specified via --view <view_name>.")
+
     target = "secondary" if args.secondary else "primary"
     db_path = get_duckdb_path(target=target, custom_path=args.db)
+
+    # 3. Validate that the specified view exists in the database
+    import duckdb
+    try:
+        check_con = duckdb.connect(db_path, read_only=True)
+        available_views = [r[0] for r in check_con.execute("SHOW TABLES").fetchall()]
+        check_con.close()
+        if args.view not in available_views:
+            avail_str = ", ".join(sorted(available_views)) if available_views else "none"
+            parser.error(f"View/table '{args.view}' does not exist in database '{db_path}'. Available: {avail_str}")
+    except Exception as exc:
+        if "does not exist in database" in str(exc):
+            raise
+        pass
+
     output_fmt = "markdown" if args.output in ["markdown", "md"] else "text"
 
     if args.head is not None:

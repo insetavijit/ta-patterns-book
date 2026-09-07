@@ -110,6 +110,7 @@ def simulate_signals(
     exits: pd.Series,
     init_cash: float = 10000.0,
     fees: float = 0.0,
+    entry_on: str = "close",
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Generic vectorized trade execution and performance metric calculation from signals."""
     close = ohlcv["close"]
@@ -126,7 +127,7 @@ def simulate_signals(
 
         if is_entry and pos == 0:
             pos = 1
-            entry_price = curr_price
+            entry_price = float(row["open"]) if entry_on == "open" and "open" in row else curr_price
             entry_time = ts
             entry_idx = i
         elif is_exit and pos == 1:
@@ -275,12 +276,14 @@ def run_single_month(
         "slippage_pct": 0.0,
     }
 
+    entry_on = "open" if "v3" in strategy_name else "close"
     metrics, trades = simulate_signals(
         ohlcv=ohlcv,
         entries=entries,
         exits=exits,
         init_cash=init_cash,
         fees=fees,
+        entry_on=entry_on,
     )
 
     fingerprint = compute_hash(params)

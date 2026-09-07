@@ -2,8 +2,14 @@
 
 
 def build_monthly_query(view_name: str = "trades", target_month: str = None, has_month_col: bool = True) -> str:
-    month_clause = f"WHERE month_table = '{target_month}'" if target_month else ""
-    group_col = "month_table" if has_month_col else "'ALL'"
+    if has_month_col:
+        month_clause = f"WHERE month_table = '{target_month}'" if target_month else ""
+        group_col = "month_table"
+    else:
+        month_expr = "STRFTIME(CAST(entry_time AS TIMESTAMP), '%Y-%m')"
+        month_clause = f"WHERE {month_expr} = '{target_month}'" if target_month else ""
+        group_col = month_expr
+
     return f"""
         SELECT 
             {group_col} AS mnth,
@@ -40,6 +46,7 @@ def build_duration_query(
     wins_only: bool = False,
     pattern_filter: str = None,
     duration_col: str = "duration_candel",
+    has_pattern_col: bool = False,
 ) -> str:
     where_clauses = []
     if losses_only:
@@ -52,13 +59,14 @@ def build_duration_query(
             col_part, val_part = filter_expr.split("=", 1)
             filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
         
+        target_pfx = "t." if has_pattern_col else "p."
         if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
-            where_clauses.append(f"p.{filter_expr}")
+            where_clauses.append(f"{target_pfx}{filter_expr}")
         else:
             where_clauses.append(filter_expr)
 
     where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    from_clause = f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number' if pattern_filter else f'"{view_name}" t'
+    from_clause = f'"{view_name}" t' if (has_pattern_col or not pattern_filter) else f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number'
 
     return f"""
         SELECT 
@@ -91,6 +99,7 @@ def build_duration_query(
 def build_loss_group_query(
     view_name: str = "trades",
     pattern_filter: str = None,
+    has_pattern_col: bool = False,
 ) -> str:
     where_clauses = []
     if pattern_filter:
@@ -99,13 +108,14 @@ def build_loss_group_query(
             col_part, val_part = filter_expr.split("=", 1)
             filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
         
+        target_pfx = "t." if has_pattern_col else "p."
         if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
-            where_clauses.append(f"p.{filter_expr}")
+            where_clauses.append(f"{target_pfx}{filter_expr}")
         else:
             where_clauses.append(filter_expr)
 
     where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    from_clause = f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number' if pattern_filter else f'"{view_name}" t'
+    from_clause = f'"{view_name}" t' if (has_pattern_col or not pattern_filter) else f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number'
 
     return f"""
         SELECT 
@@ -207,8 +217,9 @@ def build_distribution_query(
             col_part, val_part = filter_expr.split("=", 1)
             filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
         
+        target_pfx = "t." if has_pattern_col else "p."
         if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
-            where_clauses.append(f"p.{filter_expr}")
+            where_clauses.append(f"{target_pfx}{filter_expr}")
         else:
             where_clauses.append(filter_expr)
 

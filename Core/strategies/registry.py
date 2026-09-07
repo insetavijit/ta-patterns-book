@@ -15,12 +15,16 @@ from .sma_cross import SmaCrossStrategy
 from .classic_floor_v1 import ClassicFloorV1Strategy
 from .classic_floor_v2 import ClassicFloorV2Strategy
 from .classic_floor_v2a import ClassicFloorV2AStrategy
+from .classic_floor_v3 import ClassicFloorV3Strategy
+from .classic_floor_v3a import ClassicFloorV3AStrategy
 
 _REGISTRY: dict[str, "StrategyProtocol"] = {
     "sma_cross":             SmaCrossStrategy(),
     "classic_floor_mod_v1":  ClassicFloorV1Strategy(),
     "classic_floor_mod_v2":  ClassicFloorV2Strategy(),
     "classic_floor_mod_v2a": ClassicFloorV2AStrategy(),
+    "classic_floor_mod_v3":  ClassicFloorV3Strategy(),
+    "classic_floor_mod_v3a": ClassicFloorV3AStrategy(),
 }
 
 
