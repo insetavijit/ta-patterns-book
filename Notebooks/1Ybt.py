@@ -109,7 +109,7 @@ def simulate_signals(
     entries: pd.Series,
     exits: pd.Series,
     init_cash: float = 10000.0,
-    fees: float = 0.001,
+    fees: float = 0.0,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Generic vectorized trade execution and performance metric calculation from signals."""
     close = ohlcv["close"]
@@ -222,7 +222,7 @@ def run_single_month(
     symbol: str,
     timeframe: str,
     init_cash: float = 10000.0,
-    fees: float = 0.001,
+    fees: float = 0.0,
 ) -> dict[str, Any]:
     """Worker task: Load single-month slice, invoke strategy via registry, and compute simulation."""
     con = duckdb.connect(db_path, read_only=True)
@@ -568,6 +568,12 @@ def main() -> None:
         default=4,
         help="Number of concurrent process workers (default: 4)",
     )
+    parser.add_argument(
+        "--fees",
+        type=float,
+        default=0.0,
+        help="Broker commission / fee rate per leg (default: 0.0)",
+    )
     args = parser.parse_args()
 
     console = Console()
@@ -614,6 +620,8 @@ def main() -> None:
                 args.strategy,
                 args.symbol,
                 args.timeframe,
+                10000.0,
+                args.fees,
             ): label
             for label, w_start, w_end in windows
         }
