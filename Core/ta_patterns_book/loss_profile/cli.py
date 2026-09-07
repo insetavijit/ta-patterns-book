@@ -17,7 +17,9 @@ from .reporters import (
 
 def main():
     parser = argparse.ArgumentParser(description="Strategy Loss Profiler, Monthly, Weekly & Duration Performance Reporter")
-    parser.add_argument("--db", type=str, default=None, help="Path to DuckDB database file")
+    parser.add_argument("--db", type=str, default=None, help="Explicit path to DuckDB database file")
+    parser.add_argument("--primary", action="store_true", help="Use primary database defined in Shared/cnf.yaml")
+    parser.add_argument("--secondary", "--secoundary", action="store_true", help="Use secondary database defined in Shared/cnf.yaml")
     parser.add_argument("--view", type=str, default="trades", help="Source view/table (default: trades)")
     parser.add_argument("--monthly", "--month", "--mnth", nargs="?", const="all", type=str, default=None, help="Display monthly performance breakdown (Deprecated: use --dist monthly)")
     parser.add_argument("--weekly", "--wk", action="store_true", help="Display weekly performance breakdown table (Deprecated: use --dist weekly)")
@@ -40,7 +42,10 @@ def main():
     parser.add_argument("--output", "--fmt", "-o", choices=["text", "markdown", "md"], default="text", help="Output format: 'text' (default) or 'markdown'/'md'")
 
     args = parser.parse_args()
-    db_path = args.db if args.db else get_duckdb_path()
+    
+    # Resolve database selection: --db <path>, --secondary, or --primary (default)
+    target = "secondary" if args.secondary else "primary"
+    db_path = get_duckdb_path(target=target, custom_path=args.db)
     output_fmt = "markdown" if args.output in ["markdown", "md"] else "text"
 
     if args.head is not None:

@@ -65,7 +65,8 @@ paths:
       purpose: "Generated reports, exported charts, PNG figures, processed metrics, and trained models."
     data:
       path: "Shared/Data"
-      primary_db: "Shared/Data/eur_usd_trades_5m.duckdb"
+      primary_db: "Shared/INPs/Ohlcv_2325Eurusd.duckdb"
+      secondary_db: "Shared/Data/eur_usd_trades_5m.duckdb"
       backtest_db: "Shared/INPs/Ohlcv_2325Eurusd.duckdb"
       purpose: "Shared static data fixtures and reference tables."
     strategies:

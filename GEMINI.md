@@ -38,7 +38,8 @@
 
 ## Database Schemas & Key Conventions
 
-- **Primary Database**: `Shared/Data/eur_usd_trades_5m.duckdb`
+- **Primary Database (Active Work)**: `Shared/INPs/Ohlcv_2325Eurusd.duckdb` (used by `vbtspike`, `1Ybt.py`, and `loss-profile --primary`).
+- **Secondary Database (Historical Baseline)**: `Shared/Data/eur_usd_trades_5m.duckdb` (531 baseline trades with 3-candle patterns, used by `loss-profile --secondary`).
 - **Trades Primary Key**: Join on `trades.uid` = `"3candels_patterns".trade_number` (`BIGINT PRIMARY KEY`, integers `1..531`).
 - **3-Candle Pattern Classifications** (`"3candels_patterns"` table & `"3candels_patterns_view"` view):
   - `entry_1`: 3 setup candles strictly before entry bar (`pos-3`, `pos-2`, `pos-1`).
