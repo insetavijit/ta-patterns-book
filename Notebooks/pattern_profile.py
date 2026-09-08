@@ -2,13 +2,15 @@
 """pattern_profile.py: Profile setup patterns (entry_1) across:
 1. entry_1 performance distribution
 2. Candle duration distribution
-3. 6 Candlestick pattern classes (ecpatt_1..3 and epcpatt_1..3)
+3. Candlestick pattern classes (ecpatt_1..3 and epcpatt_1..3)
+4. Dynamic segment grouping via --group (e.g. --group epcpatt)
 
 Usage examples:
-    uv run python Notebooks/pattern_profile.py --pattern="DR-UG-UG" --primary
+    uv run python Notebooks/pattern_profile.py --group epcpatt --primary
+    uv run python Notebooks/pattern_profile.py --group epcpatt --pattern="DR-UG-UG" --primary
+    uv run python Notebooks/pattern_profile.py --group ecpatt --primary
     uv run python Notebooks/pattern_profile.py --pattern="DR-UG-UG" --primary --dump
     uv run python Notebooks/pattern_profile.py --primary
-    uv run python Notebooks/pattern_profile.py --secondary --pattern="DR-DR-DR"
 """
 
 import argparse
@@ -123,7 +125,13 @@ CANDLESTICK_PATTERN_COLS = [
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Profile setup patterns (entry_1) across duration and the 6 candlestick pattern classes."
+        description="Profile setup patterns (entry_1) across duration and candlestick pattern classes, with segment grouping."
+    )
+    parser.add_argument(
+        "--group", "-g",
+        type=str,
+        default="all",
+        help="Target distribution group prefix (e.g. 'epcpatt', 'ecpatt', 'entry', 'duration', or 'all')",
     )
     parser.add_argument(
         "--pattern", "-p",
@@ -156,7 +164,7 @@ def main():
     parser.add_argument(
         "--skip-candlestick-patterns",
         action="store_true",
-        help="Skip the 6 candlestick pattern class breakdown tables",
+        help="Skip the candlestick pattern breakdown tables in 'all' mode",
     )
     parser.add_argument(
         "--output", "-o",
@@ -178,6 +186,8 @@ def main():
     if pattern and pattern.upper() in ["ALL", "*", "NONE"]:
         pattern = None
 
+    group = args.group.strip().lower()
+
     db_path, view_name = resolve_db_and_view(
         pattern=pattern,
         db_arg=args.db,
@@ -195,7 +205,9 @@ def main():
 
     console = Console()
     filter_expr = f"entry_1 = '{pattern}'" if pattern else None
-    profile_title = f"PATTERN PROFILE: {pattern} (entry_1)" if pattern else f"STRATEGY PATTERN PROFILE: ALL entry_1 PATTERNS"
+
+    group_suffix = f" (GROUP: {group})" if group != "all" else ""
+    profile_title = f"PATTERN PROFILE: {pattern}{group_suffix}" if pattern else f"STRATEGY PATTERN PROFILE{group_suffix}"
 
     console.print(f"\n[bold cyan]═══ {profile_title} ═══[/bold cyan]")
     console.print(f"  • Database : [yellow]{db_path}[/yellow]")
@@ -217,32 +229,31 @@ def main():
             sys.stdout = orig_stdout
         return
 
-    # Section 1: entry_1 Performance Breakdown
-    console.print(f"[bold cyan]─── SECTION 1: ENTRY_1 PERFORMANCE BREAKDOWN ───[/bold cyan]")
-    generate_distribution_table(
-        db_path=db_path,
-        view_name=view_name,
-        pattern_col="entry_1",
-        pattern_filter=filter_expr,
-        output_fmt=args.output,
-    )
+    # Mode 1: Duration only
+    if group == "duration":
+        console.print(f"[bold cyan]─── HOLDING DURATION DISTRIBUTION ───[/bold cyan]")
+        generate_duration_table(
+            db_path=db_path,
+            view_name=view_name,
+            pattern_filter=filter_expr,
+            output_fmt=args.output,
+        )
 
-    # Section 2: Holding Duration Distribution
-    console.print(f"\n[bold cyan]─── SECTION 2: HOLDING DURATION DISTRIBUTION ───[/bold cyan]")
-    generate_duration_table(
-        db_path=db_path,
-        view_name=view_name,
-        pattern_filter=filter_expr,
-        output_fmt=args.output,
-    )
+    # Mode 2: Specific prefix group (e.g. 'epcpatt', 'ecpatt', 'entry', etc.)
+    elif group != "all":
+        # Match columns starting with "{group}_" or exactly equal to "{group}"
+        matched_cols = [c for c in cols if c == group or c.startswith(f"{group}_")]
+        # Sort naturally by index if ending in numbers
+        matched_cols.sort(key=lambda x: [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', x)])
 
-    # Section 3: The 6 Candlestick Pattern Distribution Classes
-    if not args.skip_candlestick_patterns:
-        available_cdl_cols = [c for c in CANDLESTICK_PATTERN_COLS if c[0] in cols]
-        if available_cdl_cols:
-            console.print(f"\n[bold cyan]─── SECTION 3: CANDLESTICK PATTERN DISTRIBUTIONS ({len(available_cdl_cols)} CLASSES) ───[/bold cyan]")
-            for col_name, col_desc in available_cdl_cols:
-                console.print(f"\n[bold green]► {col_desc.upper()}[/bold green]")
+        if not matched_cols:
+            console.print(f"[red]No columns found matching group prefix '{group}_' in view '{view_name}'.[/red]")
+            avail = [c for c in cols if "_" in c]
+            console.print(f"[yellow]Available prefixed columns: {', '.join(sorted(avail))}[/yellow]")
+        else:
+            console.print(f"[bold cyan]─── DISTRIBUTION TABLES FOR GROUP: '{group.upper()}' ({len(matched_cols)} COLUMNS) ───[/bold cyan]")
+            for col_name in matched_cols:
+                console.print(f"\n[bold green]► {col_name.upper()} DISTRIBUTION[/bold green]")
                 generate_distribution_table(
                     db_path=db_path,
                     view_name=view_name,
@@ -250,6 +261,42 @@ def main():
                     pattern_filter=filter_expr,
                     output_fmt=args.output,
                 )
+
+    # Mode 3: "all" mode (Section 1: entry_1, Section 2: duration, Section 3: 6 candlestick classes)
+    else:
+        # Section 1: entry_1 Performance Breakdown
+        console.print(f"[bold cyan]─── SECTION 1: ENTRY_1 PERFORMANCE BREAKDOWN ───[/bold cyan]")
+        generate_distribution_table(
+            db_path=db_path,
+            view_name=view_name,
+            pattern_col="entry_1",
+            pattern_filter=filter_expr,
+            output_fmt=args.output,
+        )
+
+        # Section 2: Holding Duration Distribution
+        console.print(f"\n[bold cyan]─── SECTION 2: HOLDING DURATION DISTRIBUTION ───[/bold cyan]")
+        generate_duration_table(
+            db_path=db_path,
+            view_name=view_name,
+            pattern_filter=filter_expr,
+            output_fmt=args.output,
+        )
+
+        # Section 3: The 6 Candlestick Pattern Distribution Classes
+        if not args.skip_candlestick_patterns:
+            available_cdl_cols = [c for c in CANDLESTICK_PATTERN_COLS if c[0] in cols]
+            if available_cdl_cols:
+                console.print(f"\n[bold cyan]─── SECTION 3: CANDLESTICK PATTERN DISTRIBUTIONS ({len(available_cdl_cols)} CLASSES) ───[/bold cyan]")
+                for col_name, col_desc in available_cdl_cols:
+                    console.print(f"\n[bold green]► {col_desc.upper()}[/bold green]")
+                    generate_distribution_table(
+                        db_path=db_path,
+                        view_name=view_name,
+                        pattern_col=col_name,
+                        pattern_filter=filter_expr,
+                        output_fmt=args.output,
+                    )
 
     con.close()
 
@@ -262,18 +309,10 @@ def main():
         outs_dir = _REPO_ROOT / "Shared" / "OUTs"
         outs_dir.mkdir(parents=True, exist_ok=True)
 
-        if args.dump == "default":
-            if pattern:
-                safe_p = pattern.replace("-", "_")
-                dump_file = outs_dir / f"pattern_profile_{safe_p}_{safe_v}.{dump_fmt}"
-            else:
-                dump_file = outs_dir / f"pattern_profile_entry_1_{safe_v}.{dump_fmt}"
-        else:
-            custom_path = Path(args.dump)
-            if not custom_path.suffix:
-                custom_path = custom_path.with_suffix(f".{dump_fmt}")
-            dump_file = custom_path if custom_path.is_absolute() else _REPO_ROOT / custom_path
-            dump_file.parent.mkdir(parents=True, exist_ok=True)
+        group_part = f"{group}_" if group != "all" else ""
+        pattern_part = f"{pattern.replace('-', '_')}_" if pattern else ""
+
+        dump_file = outs_dir / f"pattern_profile_{group_part}{pattern_part}{safe_v}.{dump_fmt}"
 
         clean_output = tee.get_clean_text()
         with open(dump_file, "w", encoding="utf-8") as f:
