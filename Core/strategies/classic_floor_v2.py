@@ -33,13 +33,14 @@ class ClassicFloorV2Strategy:
 
     def __init__(self) -> None:
         self._inner = _ClassicFloorModV2()
+        self.last_trades_df: pd.DataFrame | None = None
 
     def generate_signals(
         self,
         ohlcv: pd.DataFrame,
         params: dict[str, Any] | None = None,
     ) -> tuple[pd.Series, pd.Series]:
-        """Delegate to ClassicFloorModV2 and discard the trades_df third element.
+        """Delegate to ClassicFloorModV2 and cache the trades_df third element.
 
         Args:
             ohlcv:  DataFrame with columns [open, high, low, close, volume].
@@ -48,5 +49,11 @@ class ClassicFloorV2Strategy:
         Returns:
             (entries, exits): Boolean pd.Series aligned to ohlcv.index.
         """
-        entries, exits, _trades_df = self._inner.generate_signals(ohlcv, params=params)
+        res = self._inner.generate_signals(ohlcv, params=params)
+        if len(res) == 3:
+            entries, exits, trades_df = res
+            self.last_trades_df = trades_df
+        else:
+            entries, exits = res
+            self.last_trades_df = None
         return entries, exits

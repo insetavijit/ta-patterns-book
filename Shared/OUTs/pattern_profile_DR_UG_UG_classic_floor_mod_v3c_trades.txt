@@ -1,0 +1,69 @@
+
+═══ PATTERN PROFILE: DR-UG-UG ═══
+  • Database : 
+/home/avijit/workSpace/Code/ta-patterns-book/Shared/INPs/Ohlcv_2325Eurusd.duckdb
+  • View     : classic_floor_mod_v3c_trades
+
+
+PATTERN PERFORMANCE DISTRIBUTION FOR 'entry_2' [FILTER: entry_1 = 'DR-UG-UG'] 
+(View: classic_floor_mod_v3c_trades)
+pattern   number of trades  win  loss   win%  ammount ( sum )
+UG-UG-UG               113   66    47  58.41  +$75.72        
+UG-UG-DR               105   38    67  36.19  -$72.91        
+UG-UG-UR                11    4     7  36.36  -$16.37        
+UG-UG-DG                 2    2     0  100.0  +$11.63        
+TOTALS : 231 Trades | 110 Wins | 121 Losses | Win%: 47.62% | Net PnL: -$1.93
+
+
+─── DURATION BREAKDOWNS FOR ALL 4 ENTRY_2 GROUPS ───
+
+DURATION BRACKET STRATEGY PERFORMANCE BREAKDOWN [FILTER: entry_1 = 'DR-UG-UG' 
+AND entry_2 = 'UG-UG-UG']
+duration_bracket          number of trades  win  loss   win%  ammount ( sum )
+1 candle (5m)                           19   15     4  78.95  +$64.56        
+2 candles (10m)                          3    2     1  66.67  +$15.82        
+3 candles (15m)                          3    3     0  100.0  +$22.20        
+4 candles (20m)                          3    2     1  66.67  -$5.36         
+5 candles (25m)                          7    5     2  71.43  +$16.14        
+6-10 candles (30-50m)                   20   13     7   65.0  +$38.69        
+11-15 candles (55-75m)                  13    8     5  61.54  +$7.94         
+16-30 candles (80-150m)                 20    4    16   20.0  -$128.98       
+31-60 candles (155-300m)                14    9     5  64.29  +$50.44        
+60+ candles (> 300m)                    11    5     6  45.45  -$5.72         
+TOTALS : 113 Trades | 66 Wins | 47 Losses | Win%: 58.41% | Net PnL: +$75.72
+
+
+DURATION BRACKET STRATEGY PERFORMANCE BREAKDOWN [FILTER: entry_1 = 'DR-UG-UG' 
+AND entry_2 = 'UG-UG-DR']
+duration_bracket          number of trades  win  loss   win%  ammount ( sum )
+1 candle (5m)                            7    0     7    0.0  -$44.80        
+2 candles (10m)                          9    1     8  11.11  -$64.80        
+3 candles (15m)                          8    1     7   12.5  -$30.28        
+4 candles (20m)                          4    2     2   50.0  +$7.63         
+5 candles (25m)                          4    2     2   50.0  -$5.27         
+6-10 candles (30-50m)                   18    5    13  27.78  -$89.00        
+11-15 candles (55-75m)                  22    8    14  36.36  -$114.09       
+16-30 candles (80-150m)                 12    5     7  41.67  +$3.17         
+31-60 candles (155-300m)                11    6     5  54.55  +$90.59        
+60+ candles (> 300m)                    10    8     2   80.0  +$173.93       
+TOTALS : 105 Trades | 38 Wins | 67 Losses | Win%: 36.19% | Net PnL: -$72.91
+
+
+DURATION BRACKET STRATEGY PERFORMANCE BREAKDOWN [FILTER: entry_1 = 'DR-UG-UG' 
+AND entry_2 = 'UG-UG-UR']
+duration_bracket          number of trades  win  loss   win%  ammount ( sum )
+2 candles (10m)                          2    0     2    0.0  -$10.99        
+3 candles (15m)                          1    1     0  100.0  +$4.05         
+6-10 candles (30-50m)                    2    0     2    0.0  -$12.35        
+11-15 candles (55-75m)                   1    0     1    0.0  -$3.50         
+16-30 candles (80-150m)                  4    3     1   75.0  +$20.49        
+31-60 candles (155-300m)                 1    0     1    0.0  -$14.08        
+TOTALS : 11 Trades | 4 Wins | 7 Losses | Win%: 36.36% | Net PnL: -$16.37
+
+
+DURATION BRACKET STRATEGY PERFORMANCE BREAKDOWN [FILTER: entry_1 = 'DR-UG-UG' 
+AND entry_2 = 'UG-UG-DG']
+duration_bracket       number of trades  win  loss   win%  ammount ( sum )
+6-10 candles (30-50m)                 2    2     0  100.0  +$11.63        
+TOTALS : 2 Trades | 2 Wins | 0 Losses | Win%: 100.00% | Net PnL: +$11.63
+

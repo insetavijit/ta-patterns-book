@@ -1,9 +1,13 @@
 import pandas as pd
 import numpy as np
-import pandas_ta_classic as ta
+try:
+    import pandas_ta_classic as ta
+except ImportError:
+    ta = None
 
-class ClassicFloorModV3:
-    name = "classic_floor_mod_v3"
+
+class ClassicFloorModV3B:
+    name = "classic_floor_mod_v3b"
     warmup_candles = 22
 
     def __init__(self, allow_same_bar_exit: bool = False, filter_zero_volume: bool = True):
@@ -16,12 +20,15 @@ class ClassicFloorModV3:
         params: dict | None = None,
     ) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
         """
-        ClassicFloorModV3: Strategy entering on the 3rd candle's open from signal.
+        ClassicFloorModV3B: Strategy entering on 3rd candle's open from signal,
+        with dynamic delay filters:
         - Core Pivot math: Pivot, S1, R1 (20-period lookback, shifted by 1)
-        - Signal Candle (Bar 0): close <= S1
-        - Wait period: Bar +1 and Bar +2
-        - Entry at Bar +3 Open (identical to Bar +2 Close in continuous market data)
-        - Dynamic Stop Loss: lower of signal body low & 2nd candle body low minus half (R1 - S1) range
+        - Scheduled Entry: Bar +3 Open
+        - DR-DR-DR Filter: If pre-entry 3 candles (entry_1) are DR-DR-DR, delay entry by 3 additional candles
+        - DR-UG-DR Filter: If entry_1 is DR-UG-DR, hold for next candle (Bar +1) to form.
+          If that candle forms UG-DR-DR (closed down-red), delay entry for 2 additional candles.
+          Else, enter immediately on the confirmed open.
+        - Dynamic Stop Loss: lower of signal body low & lowest wait-candle body low minus half (R1 - S1) range
         - Take Profit at frozen R1
         - allow_same_bar_exit: if False (default), holds trade at least 1 candle, suppressing new signals
         - filter_zero_volume: if True (default), suppresses phantom entries on flat-line / 0-volume closed market bars
@@ -35,8 +42,7 @@ class ClassicFloorModV3:
 
         df = ohlcv.copy().reset_index(drop=True)
 
-        # 1. CLASSIC FLOOR TRADER PIVOTS via pandas rolling calculations
-        # 20-period lookback, shifted by 1 bar
+        # 1. CLASSIC FLOOR TRADER PIVOTS via rolling calculations
         high20 = df['high'].rolling(20).max().shift(1)
         low20  = df['low'].rolling(20).min().shift(1)
         prev_close = df['close'].shift(1)
@@ -48,6 +54,23 @@ class ClassicFloorModV3:
         df['s1'] = s1
         df['r1'] = r1
         df['body_low'] = np.minimum(df['open'], df['close'])
+
+        # 2. CANDLE STATE & 3-CANDLE PATTERN CLASSIFICATION INDICATORS
+        prev_close_bar = df['close'].shift(1)
+        prev_close_bar.iloc[0] = df['open'].iloc[0]
+
+        is_up = df['close'] >= prev_close_bar
+        is_green = df['close'] > df['open']
+        dir_str = np.where(is_up, "U", "D")
+        col_str = np.where(is_green, "G", "R")
+        df['candle_state'] = dir_str + col_str
+
+        # Calculate pattern variants (entry_1 to entry_4) for each bar
+        cs = df['candle_state']
+        df['entry_1'] = cs.shift(3) + "-" + cs.shift(2) + "-" + cs.shift(1)
+        df['entry_2'] = cs.shift(2) + "-" + cs.shift(1) + "-" + cs
+        df['entry_3'] = cs.shift(1) + "-" + cs + "-" + cs.shift(-1)
+        df['entry_4'] = cs + "-" + cs.shift(-1) + "-" + cs.shift(-2) + "-" + cs.shift(-3)
 
         # Output signal arrays
         entries = pd.Series(False, index=df.index)
@@ -64,14 +87,15 @@ class ClassicFloorModV3:
         body_low_arr = df['body_low'].values
 
         waiting_for_entry = False
+        checking_drugdr = False
         in_trade = False
         trade_id_counter = 0
 
-        signal_bar = None
+        orig_signal_bar = None
+        current_target_bar = None
         setup_s1 = None
         setup_r1 = None
         signal_body_low = None
-        setup_c2_body_low = None
 
         stop_price = None
         target_price = None
@@ -119,11 +143,12 @@ class ClassicFloorModV3:
                     exit_reason_series[i] = "TP" if target_hit else "SL"
 
                     waiting_for_entry = False
-                    signal_bar = None
+                    checking_drugdr = False
+                    orig_signal_bar = None
+                    current_target_bar = None
                     setup_s1 = None
                     setup_r1 = None
                     signal_body_low = None
-                    setup_c2_body_low = None
                     stop_price = None
                     target_price = None
                     entry_price_val = None
@@ -135,29 +160,48 @@ class ClassicFloorModV3:
 
             if signal_condition:
                 waiting_for_entry = True
-                signal_bar = i
+                checking_drugdr = False
+                orig_signal_bar = i
                 signal_time_val = ohlcv.index[i]
+                current_target_bar = i + 3  # Initial scheduled entry at 3rd candle from signal
                 setup_s1 = s1_arr[i]
                 setup_r1 = r1_arr[i]
                 signal_body_low = body_low_arr[i]
-                setup_c2_body_low = None
 
-            # Track 2nd candle body low (signal_bar + 2)
-            if waiting_for_entry and (signal_bar is not None) and (i == signal_bar + 2):
-                setup_c2_body_low = body_low_arr[i]
+            # Entry evaluation at current_target_bar
+            if waiting_for_entry and (current_target_bar is not None) and (i == current_target_bar):
+                # 1. If we previously delayed 1 candle specifically to check DR-UG-DR confirmation
+                if checking_drugdr:
+                    checking_drugdr = False
+                    # Check if the waiting candle closed as UG-DR-DR (down-red)
+                    if df['entry_1'].iloc[i] == 'UG-DR-DR':
+                        current_target_bar = i + 2  # Delay entry for 2 additional candles
+                        continue
+                    # Else it did not close down-red (e.g. closed UG) -> proceed to enter below
 
-            # Entry at 3rd Candle Open (signal_bar + 3)
-            if waiting_for_entry and (signal_bar is not None) and (i == signal_bar + 3):
+                # 2. Check if pre-entry 3-candle setup (entry_1) is DR-DR-DR
+                if df['entry_1'].iloc[i] == 'DR-DR-DR':
+                    current_target_bar = i + 3  # Delay entry by 3 more candles
+                    continue
+
+                # 3. Check if pre-entry 3-candle setup (entry_1) is DR-UG-DR
+                if df['entry_1'].iloc[i] == 'DR-UG-DR':
+                    checking_drugdr = True
+                    current_target_bar = i + 1  # Hold for 1 candle to form and confirm
+                    continue
+
+                # Normal Entry Execution
                 waiting_for_entry = False
                 in_trade = True
                 trade_id_counter += 1
                 active_signal_time = signal_time_val
 
-                c2_low = setup_c2_body_low if setup_c2_body_low is not None else body_low_arr[i - 1]
-                sl_anchor = min(signal_body_low, c2_low)
+                # Dynamic Stop Loss: lower of signal body low & lowest body low across wait candles
+                wait_low = np.min(body_low_arr[orig_signal_bar + 1 : i]) if i > orig_signal_bar + 1 else body_low_arr[i - 1]
+                sl_anchor = min(signal_body_low, wait_low)
                 sl_distance = (setup_r1 - setup_s1) / 2.0
 
-                entry_price_val = open_arr[i]  # 3rd candle's open (same as 2nd candle's close)
+                entry_price_val = open_arr[i]  # Enter on Open
                 stop_price = sl_anchor - sl_distance
                 target_price = setup_r1
 
@@ -186,11 +230,11 @@ class ClassicFloorModV3:
                         is_win_series[i] = 1 if target_hit else -1
                         exit_reason_series[i] = "TP" if target_hit else "SL"
 
-                        signal_bar = None
+                        orig_signal_bar = None
+                        current_target_bar = None
                         setup_s1 = None
                         setup_r1 = None
                         signal_body_low = None
-                        setup_c2_body_low = None
                         stop_price = None
                         target_price = None
                         entry_price_val = None

@@ -83,6 +83,12 @@ def generate_trade_book(
             t_id = row.get("trade_id", i + 1)
             entry_dt = _to_naive_ts(pd, row["entry_time"])
             entry_p = float(row["entry_price"])
+            signal_time_given = row.get("signal_time")
+            signal_dt = (
+                _to_naive_ts(pd, signal_time_given)
+                if signal_time_given is not None and pd.notna(signal_time_given)
+                else None
+            )
             sl_p = row.get("sl_price")
             sl_p = float(sl_p) if sl_p is not None and pd.notna(sl_p) else None
             tp_p = row.get("tp_price")
@@ -138,6 +144,7 @@ def generate_trade_book(
             trade_windows.append(
                 {
                     "t_id": t_id,
+                    "signal_dt": signal_dt,
                     "entry_dt": entry_dt,
                     "entry_p": entry_p,
                     "sl_p": sl_p,
@@ -213,25 +220,54 @@ def generate_trade_book(
 
                 x_dates = df_w.index
                 entry_dt = tw["entry_dt"]
+                if x_dates.tz is not None and entry_dt.tzinfo is None:
+                    entry_dt = entry_dt.tz_localize(x_dates.tz)
+                elif x_dates.tz is None and entry_dt.tzinfo is not None:
+                    entry_dt = entry_dt.tz_localize(None)
+
+                entry_idx = None
                 entry_idx_arr = x_dates.get_indexer([entry_dt])
                 if entry_idx_arr[0] != -1:
                     entry_idx = entry_idx_arr[0]
                     ax.axvline(x=entry_idx, color="blue", linestyle="--", linewidth=1.2, alpha=0.8)
                     ax.axhline(y=tw["entry_p"], color="blue", linestyle=":", linewidth=1.0, alpha=0.7)
 
+                # Signal Candle and Pre-Entry Setup Span
+                signal_dt = tw.get("signal_dt")
+                if signal_dt is not None:
+                    if x_dates.tz is not None and signal_dt.tzinfo is None:
+                        signal_dt = signal_dt.tz_localize(x_dates.tz)
+                    elif x_dates.tz is None and signal_dt.tzinfo is not None:
+                        signal_dt = signal_dt.tz_localize(None)
+                    sig_idx_arr = x_dates.get_indexer([signal_dt])
+                    if sig_idx_arr[0] != -1:
+                        signal_idx = sig_idx_arr[0]
+                        ax.axvline(x=signal_idx, color="#ff9800", linestyle="--", linewidth=1.0, alpha=0.85)
+                        if entry_idx is not None and entry_idx > signal_idx:
+                            ax.axvspan(signal_idx, entry_idx, color="#ffecb3", alpha=0.35)
+
+                # Auto-expand Y-limits to ensure SL, TP, and hlines are fully visible
+                y_targets = [tw["entry_p"]]
                 if tw["sl_p"] is not None:
+                    y_targets.append(tw["sl_p"])
                     ax.axhline(
                         y=tw["sl_p"], color="red", linestyle="-", linewidth=0.9, alpha=0.75, label="SL"
                     )
                 if tw["tp_p"] is not None:
+                    y_targets.append(tw["tp_p"])
                     ax.axhline(
                         y=tw["tp_p"], color="green", linestyle="-", linewidth=0.9, alpha=0.75, label="TP"
                     )
                 for h_idx, (col_name, val) in enumerate(tw["hline_values"].items()):
+                    y_targets.append(val)
                     color = _HLINE_COLOR_CYCLE[h_idx % len(_HLINE_COLOR_CYCLE)]
                     ax.axhline(
                         y=val, color=color, linestyle="-.", linewidth=0.7, alpha=0.6, label=col_name
                     )
+
+                curr_ymin, curr_ymax = ax.get_ylim()
+                margin = (max(y_targets) - min(y_targets)) * 0.05 if max(y_targets) > min(y_targets) else 0.0005
+                ax.set_ylim(min(curr_ymin, min(y_targets) - margin), max(curr_ymax, max(y_targets) + margin))
 
                 pnl_val = tw["pnl"]
                 if pnl_val is None:
@@ -243,7 +279,15 @@ def generate_trade_book(
                 title_str = f"Trade #{tw['t_id']} | {win_loss} | Exit: {tw['exit_reason']}"
                 ax.set_title(title_str, fontsize=6.5, fontweight="bold", color=color_edge, pad=3)
                 ax.tick_params(axis="both", which="major", labelsize=5.5)
-                ax.xaxis.set_major_formatter(mdates.DateFormatter("%m-%d %H:%M"))
+
+                # Format X-axis ticks using true dates from candle index
+                n_bars = len(df_w)
+                if n_bars > 0:
+                    tick_step = max(1, n_bars // 4)
+                    tick_locs = list(range(0, n_bars, tick_step))
+                    tick_labels = [x_dates[idx].strftime("%m-%d %H:%M") for idx in tick_locs]
+                    ax.set_xticks(tick_locs)
+                    ax.set_xticklabels(tick_labels, rotation=0, ha="center")
 
         page_str = f" (Page {canvas_idx + 1}/{total_canvases})" if total_canvases > 1 else ""
         plt.suptitle(

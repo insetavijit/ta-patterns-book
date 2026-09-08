@@ -27,3 +27,7 @@ Shared/INPs
 # EXCEPT data files inside Shared/Data/
 !Shared/Data/
 !Shared/Data/**
+
+# Strategy drafts & dumps
+.dump/
+Shared/straragYs/.dump/

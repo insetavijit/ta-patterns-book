@@ -150,6 +150,8 @@ def build_projected_rr_group_query(
     losses_only: bool = False,
     wins_only: bool = False,
     pattern_filter: str = None,
+    has_prr_col: bool = False,
+    has_pattern_col: bool = False,
 ) -> str:
     where_clauses = []
     if losses_only:
@@ -162,21 +164,34 @@ def build_projected_rr_group_query(
             col_part, val_part = filter_expr.split("=", 1)
             filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
         
+        target_pfx = "t." if has_pattern_col else "p."
         if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
-            where_clauses.append(f"p.{filter_expr}")
+            where_clauses.append(f"{target_pfx}{filter_expr}")
         else:
             where_clauses.append(filter_expr)
 
+    prr_field = "t.projected_rr" if has_prr_col else "pr.projected_rr"
+    if has_prr_col:
+        where_clauses.append("t.projected_rr IS NOT NULL")
+        if has_pattern_col or not pattern_filter:
+            from_clause = f'"{view_name}" t'
+        else:
+            from_clause = f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number'
+    else:
+        if pattern_filter and not has_pattern_col:
+            from_clause = f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number JOIN projected_rr pr ON t.uid = pr.uid'
+        else:
+            from_clause = f'"{view_name}" t JOIN projected_rr pr ON t.uid = pr.uid'
+
     where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    from_clause = f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number JOIN projected_rr pr ON t.uid = pr.uid' if pattern_filter else f'"{view_name}" t JOIN projected_rr pr ON t.uid = pr.uid'
 
     return f"""
         SELECT 
             CASE 
-                WHEN pr.projected_rr < 2.0 THEN '01. < 2.0 RR'
-                WHEN pr.projected_rr >= 2.0 AND pr.projected_rr < 3.0 THEN '02. 2.0 - 3.0 RR'
-                WHEN pr.projected_rr >= 3.0 AND pr.projected_rr < 4.0 THEN '03. 3.0 - 4.0 RR'
-                WHEN pr.projected_rr >= 4.0 AND pr.projected_rr < 5.0 THEN '04. 4.0 - 5.0 RR'
+                WHEN {prr_field} < 2.0 THEN '01. < 2.0 RR'
+                WHEN {prr_field} >= 2.0 AND {prr_field} < 3.0 THEN '02. 2.0 - 3.0 RR'
+                WHEN {prr_field} >= 3.0 AND {prr_field} < 4.0 THEN '03. 3.0 - 4.0 RR'
+                WHEN {prr_field} >= 4.0 AND {prr_field} < 5.0 THEN '04. 4.0 - 5.0 RR'
                 ELSE '05. >= 5.0 RR'
             END AS rr_bracket,
             COUNT(*) AS "number of trades",
@@ -185,10 +200,10 @@ def build_projected_rr_group_query(
             ROUND(COUNT(CASE WHEN t.pnl > 0 THEN 1 END) * 100.0 / COUNT(*), 2) AS "win%",
             SUM(t.pnl) AS raw_pnl,
             MIN(CASE 
-                WHEN pr.projected_rr < 2.0 THEN 1
-                WHEN pr.projected_rr >= 2.0 AND pr.projected_rr < 3.0 THEN 2
-                WHEN pr.projected_rr >= 3.0 AND pr.projected_rr < 4.0 THEN 3
-                WHEN pr.projected_rr >= 4.0 AND pr.projected_rr < 5.0 THEN 4
+                WHEN {prr_field} < 2.0 THEN 1
+                WHEN {prr_field} >= 2.0 AND {prr_field} < 3.0 THEN 2
+                WHEN {prr_field} >= 3.0 AND {prr_field} < 4.0 THEN 3
+                WHEN {prr_field} >= 4.0 AND {prr_field} < 5.0 THEN 4
                 ELSE 5
             END) AS sort_order
         FROM {from_clause}

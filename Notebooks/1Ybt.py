@@ -58,6 +58,21 @@ def get_default_backtest_db() -> str:
     return str(_REPO_ROOT / "Shared" / "Data" / "ohlcv_eruusd.duckdb")
 
 
+def get_default_backtest_table() -> str:
+    """Resolve active OHLCV table from Shared/cnf.yaml."""
+    cnf_path = _REPO_ROOT / "Shared" / "cnf.yaml"
+    if cnf_path.exists():
+        try:
+            with open(cnf_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                val = data.get("paths", {}).get("shared", {}).get("strategies", {}).get("active_table")
+                if val:
+                    return str(val)
+        except Exception:
+            pass
+    return "ohlcv_eurusd_1m_2025"
+
+
 def compute_hash(params: dict[str, Any]) -> str:
     """Compute SHA-256 fingerprint for backtest params."""
     serialized = json.dumps(params, sort_keys=True, default=str)
@@ -111,6 +126,7 @@ def simulate_signals(
     init_cash: float = 10000.0,
     fees: float = 0.0,
     entry_on: str = "close",
+    trades_df: pd.DataFrame | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Generic vectorized trade execution and performance metric calculation from signals."""
     close = ohlcv["close"]
@@ -142,8 +158,53 @@ def simulate_signals(
             holding_bars = exit_idx - entry_idx
             holding_seconds = int((exit_time - entry_time).total_seconds())
 
+            sl_price = None
+            tp_price = None
+            exit_reason = "Closed"
+            pivot_val = None
+            s1_val = None
+            r1_val = None
+            signal_time = None
+
+            if trades_df is not None and not trades_df.empty:
+                if "sl_price" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["sl_price"].iloc[entry_idx]
+                    if pd.notna(v):
+                        sl_price = float(v)
+                if "tp_price" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["tp_price"].iloc[entry_idx]
+                    if pd.notna(v):
+                        tp_price = float(v)
+                if "exit_reason" in trades_df.columns and exit_idx < len(trades_df):
+                    v = trades_df["exit_reason"].iloc[exit_idx]
+                    if pd.notna(v) and str(v).strip():
+                        exit_reason = str(v).strip()
+                if "pivot" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["pivot"].iloc[entry_idx]
+                    if pd.notna(v):
+                        pivot_val = float(v)
+                if "s1" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["s1"].iloc[entry_idx]
+                    if pd.notna(v):
+                        s1_val = float(v)
+                if "r1" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["r1"].iloc[entry_idx]
+                    if pd.notna(v):
+                        r1_val = float(v)
+                if "signal_time" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["signal_time"].iloc[entry_idx]
+                    if pd.notna(v):
+                        signal_time = v.to_pydatetime() if hasattr(v, "to_pydatetime") else v
+
+            size_val = init_cash / entry_price
+            risk_amount = abs(entry_price - sl_price) * size_val if (sl_price is not None and sl_price > 0) else None
+            r_multiple = net_pnl / risk_amount if (risk_amount is not None and risk_amount > 0) else None
+            projected_rr = abs(tp_price - entry_price) / abs(entry_price - sl_price) if (sl_price is not None and tp_price is not None and abs(entry_price - sl_price) > 0) else None
+            trade_id = len(trades) + 1
+
             trades.append({
-                "vbt_trade_id": len(trades) + 1,
+                "trade_id": trade_id,
+                "vbt_trade_id": trade_id,
                 "parent_id": None,
                 "vbt_column": "0",
                 "direction": "Long",
@@ -152,13 +213,23 @@ def simulate_signals(
                 "exit_idx": exit_idx,
                 "entry_time": entry_time.to_pydatetime() if hasattr(entry_time, "to_pydatetime") else entry_time,
                 "exit_time": exit_time.to_pydatetime() if hasattr(exit_time, "to_pydatetime") else exit_time,
+                "signal_time": signal_time,
                 "entry_price": entry_price,
                 "exit_price": exit_price,
-                "size": init_cash / entry_price,
+                "sl_price": sl_price,
+                "tp_price": tp_price,
+                "exit_reason": exit_reason,
+                "size": size_val,
                 "entry_fees": fee_cost / 2.0,
                 "exit_fees": fee_cost / 2.0,
                 "pnl": net_pnl,
                 "return_pct": ret_pct,
+                "risk_amount": risk_amount,
+                "r_multiple": r_multiple,
+                "projected_rr": projected_rr,
+                "pivot": pivot_val,
+                "s1": s1_val,
+                "r1": r1_val,
                 "holding_bars": holding_bars,
                 "holding_seconds": holding_seconds,
                 "is_win": net_pnl > 0,
@@ -276,7 +347,8 @@ def run_single_month(
         "slippage_pct": 0.0,
     }
 
-    entry_on = "open" if "v3" in strategy_name else "close"
+    entry_on = "open" if any(k in strategy_name for k in ["v3", "v4", "v5"]) else "close"
+    trades_df = getattr(strategy, "last_trades_df", None)
     metrics, trades = simulate_signals(
         ohlcv=ohlcv,
         entries=entries,
@@ -284,6 +356,7 @@ def run_single_month(
         init_cash=init_cash,
         fees=fees,
         entry_on=entry_on,
+        trades_df=trades_df,
     )
 
     fingerprint = compute_hash(params)
@@ -333,23 +406,53 @@ def ensure_db_schema(con: duckdb.DuckDBPyConnection) -> None:
         CREATE TABLE IF NOT EXISTS trades (
             vbt_trade_id BIGINT,
             fingerprint VARCHAR,
+            trade_id BIGINT,
             direction VARCHAR,
             status VARCHAR,
             entry_time TIMESTAMP WITH TIME ZONE,
             exit_time TIMESTAMP WITH TIME ZONE,
+            signal_time TIMESTAMP WITH TIME ZONE,
             entry_price DOUBLE,
             exit_price DOUBLE,
+            sl_price DOUBLE,
+            tp_price DOUBLE,
+            exit_reason VARCHAR,
             size DOUBLE,
             entry_fees DOUBLE,
             exit_fees DOUBLE,
             pnl DOUBLE,
             return_pct DOUBLE,
+            risk_amount DOUBLE,
+            r_multiple DOUBLE,
+            projected_rr DOUBLE,
+            "pivot" DOUBLE,
+            s1 DOUBLE,
+            r1 DOUBLE,
             holding_bars BIGINT,
             holding_seconds BIGINT,
             is_win BOOLEAN,
             PRIMARY KEY (fingerprint, vbt_trade_id)
         );
     """)
+
+    # Migration for existing databases
+    for col, ctype in [
+        ("trade_id", "BIGINT"),
+        ("signal_time", "TIMESTAMP WITH TIME ZONE"),
+        ("sl_price", "DOUBLE"),
+        ("tp_price", "DOUBLE"),
+        ("exit_reason", "VARCHAR"),
+        ("risk_amount", "DOUBLE"),
+        ("r_multiple", "DOUBLE"),
+        ("projected_rr", "DOUBLE"),
+        ('"pivot"', "DOUBLE"),
+        ("s1", "DOUBLE"),
+        ("r1", "DOUBLE"),
+    ]:
+        try:
+            con.execute(f"ALTER TABLE trades ADD COLUMN IF NOT EXISTS {col} {ctype}")
+        except Exception:
+            pass
 
 
 def _safe_view_name(strategy_name: str) -> str:
@@ -365,10 +468,34 @@ def create_strategy_views(
     """Auto-generate or refresh all four DuckDB views after a strategy persist."""
     safe = _safe_view_name(strategy_name)
 
+    # Check if a patterns table exists for this strategy
+    has_patterns = False
+    extra_pattern_cols = []
+    try:
+        tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
+        if f"{safe}_patterns" in tables:
+            has_patterns = True
+            cols = [c[0] for c in con.execute(f"DESCRIBE {safe}_patterns").fetchall()]
+            for possible_col in [
+                "candle_1",
+                "ecpatt_1", "ecpatt_2", "ecpatt_3",
+                "epcpatt_1", "epcpatt_2", "epcpatt_3",
+            ]:
+                if possible_col in cols:
+                    extra_pattern_cols.append(f"p.{possible_col}")
+    except Exception:
+        pass
+
+    patterns_join = f"LEFT JOIN {safe}_patterns p ON t.vbt_trade_id = p.vbt_trade_id AND t.fingerprint = p.fingerprint" if has_patterns else ""
+    extra_cols_str = (", " + ", ".join(extra_pattern_cols)) if extra_pattern_cols else ""
+    patterns_cols = f",\n            p.entry_1, p.entry_2, p.entry_3, p.entry_4{extra_cols_str}" if has_patterns else ""
+
     # View 1 — per-strategy individual trade log
     con.execute(f"""
         CREATE OR REPLACE VIEW {safe}_trades AS
         SELECT
+            ROW_NUMBER() OVER (ORDER BY t.entry_time ASC) AS uid,
+            ROW_NUMBER() OVER (ORDER BY t.entry_time ASC) AS trade_id,
             t.vbt_trade_id,
             t.fingerprint,
             r.strategy_name,
@@ -380,18 +507,29 @@ def create_strategy_views(
             t.status,
             t.entry_time,
             t.exit_time,
+            t.signal_time,
             t.entry_price,
             t.exit_price,
+            t.sl_price,
+            t.tp_price,
+            t.exit_reason,
             t.size,
             t.entry_fees,
             t.exit_fees,
             t.pnl,
             t.return_pct,
+            t.risk_amount,
+            t.r_multiple,
+            t.projected_rr,
+            t."pivot",
+            t.s1,
+            t.r1,
             t.holding_bars,
             t.holding_seconds,
-            t.is_win
+            t.is_win{patterns_cols}
         FROM trades t
         JOIN test_runs r ON t.fingerprint = r.fingerprint
+        {patterns_join}
         WHERE r.strategy_name = '{strategy_name}'
     """)
 
@@ -465,6 +603,83 @@ def create_strategy_views(
     logger.info("Views refreshed for strategy '%s'", strategy_name)
 
 
+def populate_strategy_patterns(
+    con: duckdb.DuckDBPyConnection,
+    strategy_name: str,
+) -> None:
+    """Populate {strategy}_patterns table with entry_1..4, ecpatt_1..3, and epcpatt_1..3."""
+    safe = _safe_view_name(strategy_name)
+    try:
+        trade_count = con.execute(f"""
+            SELECT COUNT(*) 
+            FROM trades t 
+            JOIN test_runs r ON t.fingerprint = r.fingerprint 
+            WHERE r.strategy_name = '{strategy_name}'
+        """).fetchone()[0]
+        if trade_count == 0:
+            return
+
+        tables = [t[0].lower() for t in con.execute("SHOW TABLES").fetchall()]
+        ohlcv_table = None
+        for candidate in ["ohlcv_eurusd_5m_2025", "ohlcv_5m", "ohlcv"]:
+            if candidate in tables:
+                ohlcv_table = candidate
+                break
+
+        if not ohlcv_table:
+            return
+
+        from ta_patterns_book.loss_profile.candles import compute_candlestick_pattern_columns
+        df_ohlcv = con.execute(f"SELECT timestamp, open, high, low, close, volume FROM {ohlcv_table} ORDER BY timestamp ASC").fetchdf()
+        patt_df = compute_candlestick_pattern_columns(df_ohlcv)
+        for col in patt_df.columns:
+            df_ohlcv[col] = patt_df[col]
+
+        con.register("df_ohlcv_patterns_temp", df_ohlcv)
+
+        con.execute(f"""
+            CREATE OR REPLACE TABLE {safe}_patterns AS
+            WITH candle_states AS (
+                SELECT 
+                    timestamp,
+                    CASE WHEN close >= LAG(close, 1, open) OVER (ORDER BY timestamp) THEN 'U' ELSE 'D' END ||
+                    CASE WHEN close > open THEN 'G' ELSE 'R' END AS cs,
+                    ecpatt_1, ecpatt_2, ecpatt_3, epcpatt_1, epcpatt_2, epcpatt_3
+                FROM df_ohlcv_patterns_temp
+            ),
+            patterns AS (
+                SELECT
+                    timestamp,
+                    LAG(cs, 3) OVER (ORDER BY timestamp) || '-' || LAG(cs, 2) OVER (ORDER BY timestamp) || '-' || LAG(cs, 1) OVER (ORDER BY timestamp) AS entry_1,
+                    LAG(cs, 2) OVER (ORDER BY timestamp) || '-' || LAG(cs, 1) OVER (ORDER BY timestamp) || '-' || cs AS entry_2,
+                    LAG(cs, 1) OVER (ORDER BY timestamp) || '-' || cs || '-' || LEAD(cs, 1) OVER (ORDER BY timestamp) AS entry_3,
+                    cs || '-' || LEAD(cs, 1) OVER (ORDER BY timestamp) || '-' || LEAD(cs, 2) OVER (ORDER BY timestamp) || '-' || LEAD(cs, 3) OVER (ORDER BY timestamp) AS entry_4,
+                    ecpatt_1, ecpatt_2, ecpatt_3, epcpatt_1, epcpatt_2, epcpatt_3
+                FROM candle_states
+            )
+            SELECT 
+                t.vbt_trade_id,
+                t.fingerprint,
+                p.entry_1,
+                p.entry_2,
+                p.entry_3,
+                p.entry_4,
+                p.ecpatt_1,
+                p.ecpatt_2,
+                p.ecpatt_3,
+                p.epcpatt_1,
+                p.epcpatt_2,
+                p.epcpatt_3
+            FROM trades t
+            JOIN test_runs r ON t.fingerprint = r.fingerprint
+            JOIN patterns p ON t.entry_time = p.timestamp
+            WHERE r.strategy_name = '{strategy_name}';
+        """)
+        logger.info("Created %s_patterns with 6 candlestick pattern columns", safe)
+    except Exception as exc:
+        logger.warning("Failed to auto-populate %s_patterns: %s", safe, exc)
+
+
 def persist_results(
     db_path: str | Path,
     results: list[dict[str, Any]],
@@ -500,15 +715,21 @@ def persist_results(
         for t in res["trades"]:
             con.execute("""
                 INSERT OR REPLACE INTO trades (
-                    vbt_trade_id, fingerprint, direction, status,
-                    entry_time, exit_time, entry_price, exit_price,
+                    vbt_trade_id, fingerprint, trade_id, direction, status,
+                    entry_time, exit_time, signal_time, entry_price, exit_price,
+                    sl_price, tp_price, exit_reason,
                     size, entry_fees, exit_fees, pnl, return_pct,
+                    risk_amount, r_multiple, projected_rr,
+                    "pivot", s1, r1,
                     holding_bars, holding_seconds, is_win
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
-                t["vbt_trade_id"], fp, t["direction"], t["status"],
-                t["entry_time"], t["exit_time"], t["entry_price"], t["exit_price"],
+                t["vbt_trade_id"], fp, t.get("trade_id", t["vbt_trade_id"]), t["direction"], t["status"],
+                t["entry_time"], t["exit_time"], t.get("signal_time"), t["entry_price"], t["exit_price"],
+                t.get("sl_price"), t.get("tp_price"), t.get("exit_reason", "Closed"),
                 t["size"], t["entry_fees"], t["exit_fees"], t["pnl"], t["return_pct"],
+                t.get("risk_amount"), t.get("r_multiple"), t.get("projected_rr"),
+                t.get("pivot"), t.get("s1"), t.get("r1"),
                 t["holding_bars"], t["holding_seconds"], t["is_win"]
             ])
 
@@ -517,6 +738,7 @@ def persist_results(
         None,
     )
     if strategy_name:
+        populate_strategy_patterns(con, strategy_name)
         create_strategy_views(con, strategy_name)
 
     con.close()
@@ -551,8 +773,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--table",
-        default="ohlcv",
-        help="OHLCV table name (default: ohlcv)",
+        default=get_default_backtest_table(),
+        help=f"OHLCV table name (default from cnf.yaml: {get_default_backtest_table()})",
     )
     parser.add_argument(
         "--symbol",

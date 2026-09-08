@@ -51,6 +51,7 @@ The `--dist` (or `--distribution`) flag partitions strategy performance across s
 | `entry_2` | 2 setup candles before entry + entry bar (`pos-2`, `pos-1`, `pos`) | `DR-DR-UG`, `UG-UG-DR` |
 | `entry_3` | 1 candle before + entry bar + 1 candle after (`pos-1`, `pos`, `pos+1`) | `DR-UG-UG` |
 | `entry_4` | Entry bar + 3 candles after entry (`pos`, `pos+1`, `pos+2`, `pos+3`) | `UG-DR-UG-DR` |
+| `1candle` (`cdl`, `candle_1`) | Single-candlestick pattern on the entry candle (`pandas_ta_classic` + price action) | `Bull_Marubozu`, `Bull_Belt_Hold`, `Bull_Hammer`, `Bear_Belt_Hold`, etc. |
 | `duration` | Trade holding duration brackets | `1 candle (5m)`, `2 candles (10m)`, `6-10 candles (30-50m)`, `60+ candles` |
 | `loss` | Dollar loss severity brackets | `01. Wins (PnL > $0)`, `02. Small Loss ($0-$50)`, `05. Severe Loss (> $200)` |
 | `prr` | Projected Risk-to-Reward ratio brackets | `01. < 2.0 RR`, `02. 2.0 - 3.0 RR`, `05. >= 5.0 RR` |

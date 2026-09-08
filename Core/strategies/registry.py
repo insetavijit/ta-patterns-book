@@ -17,6 +17,10 @@ from .classic_floor_v2 import ClassicFloorV2Strategy
 from .classic_floor_v2a import ClassicFloorV2AStrategy
 from .classic_floor_v3 import ClassicFloorV3Strategy
 from .classic_floor_v3a import ClassicFloorV3AStrategy
+from .classic_floor_v3b import ClassicFloorV3BStrategy
+from .classic_floor_v3c import ClassicFloorV3CStrategy
+from .classic_floor_v3e import ClassicFloorV3EStrategy
+from .classic_floor_v4 import ClassicFloorV4Strategy
 
 _REGISTRY: dict[str, "StrategyProtocol"] = {
     "sma_cross":             SmaCrossStrategy(),
@@ -25,6 +29,10 @@ _REGISTRY: dict[str, "StrategyProtocol"] = {
     "classic_floor_mod_v2a": ClassicFloorV2AStrategy(),
     "classic_floor_mod_v3":  ClassicFloorV3Strategy(),
     "classic_floor_mod_v3a": ClassicFloorV3AStrategy(),
+    "classic_floor_mod_v3b": ClassicFloorV3BStrategy(),
+    "classic_floor_mod_v3c": ClassicFloorV3CStrategy(),
+    "classic_floor_mod_v3e": ClassicFloorV3EStrategy(),
+    "classic_floor_mod_v4":  ClassicFloorV4Strategy(),
 }
 
 

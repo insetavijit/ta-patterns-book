@@ -109,6 +109,9 @@ class ClassicFloorModV3A:
         realized_pnl_pct_series = np.full(n, np.nan)
         is_win_series = np.full(n, 0)
         exit_reason_series = np.full(n, "", dtype=object)
+        signal_time_series = np.full(n, None, dtype=object)
+        active_signal_time = None
+        signal_time_val = None
 
         for i in range(n):
             if in_trade:
@@ -117,6 +120,7 @@ class ClassicFloorModV3A:
                 entry_price_series[i] = entry_price_val
                 sl_series[i] = stop_price
                 tp_series[i] = target_price
+                signal_time_series[i] = active_signal_time
 
                 target_hit = high_arr[i] >= target_price
                 stop_hit = low_arr[i] <= stop_price
@@ -153,6 +157,7 @@ class ClassicFloorModV3A:
             if signal_condition:
                 waiting_for_entry = True
                 orig_signal_bar = i
+                signal_time_val = ohlcv.index[i]
                 current_target_bar = i + 3  # Initial scheduled entry at 3rd candle from signal
                 setup_s1 = s1_arr[i]
                 setup_r1 = r1_arr[i]
@@ -167,6 +172,7 @@ class ClassicFloorModV3A:
                     waiting_for_entry = False
                     in_trade = True
                     trade_id_counter += 1
+                    active_signal_time = signal_time_val
 
                     # Dynamic Stop Loss: lower of signal body low & lowest body low across wait candles
                     wait_low = np.min(body_low_arr[orig_signal_bar + 1 : i]) if i > orig_signal_bar + 1 else body_low_arr[i - 1]
@@ -182,6 +188,7 @@ class ClassicFloorModV3A:
                     entry_price_series[i] = entry_price_val
                     sl_series[i] = stop_price
                     tp_series[i] = target_price
+                    signal_time_series[i] = active_signal_time
                     entries.iloc[i] = True
 
                     # Check intrabar exit on entry bar (if allowed)
@@ -227,6 +234,7 @@ class ClassicFloorModV3A:
         trades_df['realized_pnl'] = realized_pnl_series
         trades_df['realized_pnl_pct'] = realized_pnl_pct_series
         trades_df['is_win'] = is_win_series
+        trades_df['signal_time'] = signal_time_series
 
         entries.index = ohlcv.index
         exits.index = ohlcv.index

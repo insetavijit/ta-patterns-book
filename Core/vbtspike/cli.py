@@ -460,7 +460,7 @@ def clean(db: str | None, yes: bool, dry_run: bool) -> None:
             else:
                 preserved_objects.append((name, "VIEW"))
         else:
-            if obj_lower in target_tables:
+            if obj_lower in target_tables or obj_lower.endswith("_patterns"):
                 tables_to_drop.append(name)
             else:
                 preserved_objects.append((name, "TABLE"))

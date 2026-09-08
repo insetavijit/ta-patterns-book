@@ -106,6 +106,7 @@ tools:
 # Terminal & Stdio Display Settings
 display:
   formatter: "rich"
+  default_dump: "txt"          # Default output dump file format ('txt')
   table:
     box: null                  # Borderless table (no box borders)
     show_header: true

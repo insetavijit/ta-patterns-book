@@ -331,7 +331,19 @@ def generate_projected_rr_table(
     output_fmt: str = "text",
 ):
     con = get_db_connection(db_path, read_only=True)
-    query = build_projected_rr_group_query(view_name=view_name, losses_only=losses_only, wins_only=wins_only, pattern_filter=pattern_filter)
+    cols_df = con.execute(f'DESCRIBE "{view_name}"').df()
+    cols = list(cols_df["column_name"].str.lower())
+    has_prr_col = "projected_rr" in cols
+    has_pattern_col = any(c in cols for c in ["entry_1", "entry_2", "entry_3", "entry_4"])
+
+    query = build_projected_rr_group_query(
+        view_name=view_name,
+        losses_only=losses_only,
+        wins_only=wins_only,
+        pattern_filter=pattern_filter,
+        has_prr_col=has_prr_col,
+        has_pattern_col=has_pattern_col,
+    )
     df_rr_grp = con.execute(query).df()
     con.close()
 
@@ -440,6 +452,13 @@ AXIS_ALIASES = {
     "loss": "loss", "pnl": "loss", "loss_group": "loss",
     "monthly": "monthly", "month": "monthly", "mnth": "monthly",
     "weekly": "weekly", "week": "weekly", "wk": "weekly",
+    "1candle": "candle_1", "candle_1": "candle_1", "1cdl": "candle_1", "cdl": "candle_1", "candle": "candle_1", "candle1": "candle_1",
+    "ecpatt_1": "ecpatt_1", "ecpatt1": "ecpatt_1", "ec1": "ecpatt_1",
+    "ecpatt_2": "ecpatt_2", "ecpatt2": "ecpatt_2", "ec2": "ecpatt_2",
+    "ecpatt_3": "ecpatt_3", "ecpatt3": "ecpatt_3", "ec3": "ecpatt_3",
+    "epcpatt_1": "epcpatt_1", "epcpatt1": "epcpatt_1", "epc1": "epcpatt_1",
+    "epcpatt_2": "epcpatt_2", "epcpatt2": "epcpatt_2", "epc2": "epcpatt_2",
+    "epcpatt_3": "epcpatt_3", "epcpatt3": "epcpatt_3", "epc3": "epcpatt_3",
 }
 
 
