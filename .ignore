@@ -17,6 +17,10 @@ Shared/INPs
 *.jpg
 *.jpeg
 *.svg
+*.txt
+*.xlsx
+*.xls
+Shared/OUTs/
 
 # Databases & data files (Ignore by default)
 *.duckdb
