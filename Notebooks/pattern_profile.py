@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""patter_profile.py: Profile a 3-candle setup pattern (entry_1) by entry_2 and duration groups.
+"""pattern_profile.py: Profile setup patterns (entry_1) across:
+1. entry_1 performance distribution
+2. Candle duration distribution
+3. 6 Candlestick pattern classes (ecpatt_1..3 and epcpatt_1..3)
 
 Usage examples:
-    uv run python tmp/patter_profile.py --pattern="DR-DR-DR" --dump
-    uv run python tmp/patter_profile.py --pattern="DR-UG-UG" --primary --view classic_floor_mod_v3c_trades --dump
-    uv run python tmp/patter_profile.py --pattern="DR-DR-UG" --secondary --dump custom_dump.txt
+    uv run python Notebooks/pattern_profile.py --pattern="DR-UG-UG" --primary
+    uv run python Notebooks/pattern_profile.py --pattern="DR-UG-UG" --primary --dump
+    uv run python Notebooks/pattern_profile.py --primary
+    uv run python Notebooks/pattern_profile.py --secondary --pattern="DR-DR-DR"
 """
 
 import argparse
@@ -58,7 +62,7 @@ def get_default_dump_format() -> str:
     return config.get("display", {}).get("default_dump", "txt")
 
 
-def resolve_db_and_view(pattern: str, db_arg: str = None, primary: bool = False, secondary: bool = False, view_arg: str = None):
+def resolve_db_and_view(pattern: str = None, db_arg: str = None, primary: bool = False, secondary: bool = False, view_arg: str = None):
     """Intelligently resolve DuckDB database and trade view."""
     if db_arg:
         db_path = db_arg if Path(db_arg).is_absolute() else str(_REPO_ROOT / db_arg)
@@ -72,20 +76,32 @@ def resolve_db_and_view(pattern: str, db_arg: str = None, primary: bool = False,
 
     if primary:
         db_path = get_duckdb_path(target="primary")
-        view_name = view_arg or "classic_floor_mod_v3c_trades"
+        view_name = view_arg or "classic_floor_mod_v4_trades"
         return db_path, view_name
 
     # Auto-detection: check primary first, then secondary
     primary_db = get_duckdb_path(target="primary")
-    candidate_views = [view_arg] if view_arg else ["classic_floor_mod_v3c_trades", "classic_floor_mod_v3b_trades", "classic_floor_mod_v3a_trades"]
+    candidate_views = [view_arg] if view_arg else [
+        "classic_floor_mod_v4_trades",
+        "classic_floor_mod_v3e_trades",
+        "classic_floor_mod_v3c_trades",
+        "classic_floor_mod_v3b_trades",
+        "classic_floor_mod_v3a_trades",
+    ]
     
     con = get_db_connection(primary_db, read_only=True)
     for v in candidate_views:
         try:
-            cnt = con.execute(f'SELECT COUNT(*) FROM "{v}" WHERE entry_1 = ?;', [pattern]).fetchone()[0]
-            if cnt > 0:
-                con.close()
-                return primary_db, v
+            if pattern:
+                cnt = con.execute(f'SELECT COUNT(*) FROM "{v}" WHERE entry_1 = ?;', [pattern]).fetchone()[0]
+                if cnt > 0:
+                    con.close()
+                    return primary_db, v
+            else:
+                cnt = con.execute(f'SELECT COUNT(*) FROM "{v}";').fetchone()[0]
+                if cnt > 0:
+                    con.close()
+                    return primary_db, v
         except Exception:
             continue
     con.close()
@@ -95,15 +111,25 @@ def resolve_db_and_view(pattern: str, db_arg: str = None, primary: bool = False,
     return sec_db, (view_arg or "trades")
 
 
+CANDLESTICK_PATTERN_COLS = [
+    ("ecpatt_1", "Entry Candle 1-Pattern (ecpatt_1)"),
+    ("ecpatt_2", "Entry Candle 2-Pattern (ecpatt_2)"),
+    ("ecpatt_3", "Entry Candle 3-Pattern (ecpatt_3)"),
+    ("epcpatt_1", "Setup Pre-Entry 1-Pattern (epcpatt_1)"),
+    ("epcpatt_2", "Setup Pre-Entry 2-Pattern (epcpatt_2)"),
+    ("epcpatt_3", "Setup Pre-Entry 3-Pattern (epcpatt_3)"),
+]
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Profile a 3-candle setup pattern (entry_1) by entry_2 and all duration groups."
+        description="Profile setup patterns (entry_1) across duration and the 6 candlestick pattern classes."
     )
     parser.add_argument(
         "--pattern", "-p",
         type=str,
-        default="DR-DR-DR",
-        help="Setup pattern to profile (default: DR-DR-DR)",
+        default=None,
+        help="Setup pattern to profile on entry_1 (e.g. DR-UG-UG, or omit for all entry_1 patterns)",
     )
     parser.add_argument(
         "--db",
@@ -125,7 +151,12 @@ def main():
         "--view", "-v",
         type=str,
         default=None,
-        help="Source view/table name (e.g. trades, classic_floor_mod_v3c_trades)",
+        help="Source view/table name (e.g. classic_floor_mod_v4_trades, trades)",
+    )
+    parser.add_argument(
+        "--skip-candlestick-patterns",
+        action="store_true",
+        help="Skip the 6 candlestick pattern class breakdown tables",
     )
     parser.add_argument(
         "--output", "-o",
@@ -143,7 +174,9 @@ def main():
     )
 
     args = parser.parse_args()
-    pattern = args.pattern.strip().strip("'\"")
+    pattern = args.pattern.strip().strip("'\"") if args.pattern else None
+    if pattern and pattern.upper() in ["ALL", "*", "NONE"]:
+        pattern = None
 
     db_path, view_name = resolve_db_and_view(
         pattern=pattern,
@@ -161,54 +194,62 @@ def main():
         sys.stdout = tee
 
     console = Console()
-    console.print(f"\n[bold cyan]═══ PATTERN PROFILE: {pattern} ═══[/bold cyan]")
+    filter_expr = f"entry_1 = '{pattern}'" if pattern else None
+    profile_title = f"PATTERN PROFILE: {pattern} (entry_1)" if pattern else f"STRATEGY PATTERN PROFILE: ALL entry_1 PATTERNS"
+
+    console.print(f"\n[bold cyan]═══ {profile_title} ═══[/bold cyan]")
     console.print(f"  • Database : [yellow]{db_path}[/yellow]")
     console.print(f"  • View     : [yellow]{view_name}[/yellow]\n")
 
-    # Step 1: entry_2 performance distribution for entry_1 = pattern
     con = get_db_connection(db_path, read_only=True)
     cols_df = con.execute(f'SELECT * FROM "{view_name}" LIMIT 0;').df()
-    has_pattern_col = "entry_2" in cols_df.columns
+    cols = list(cols_df.columns)
 
-    filter_expr = f"entry_1 = '{pattern}'"
-    query = build_distribution_query(
-        view_name=view_name,
-        pattern_col="entry_2",
-        pattern_filter=filter_expr,
-        has_pattern_col=has_pattern_col,
-    )
-    df_dist = con.execute(query).df()
+    # Check trade count matching filter
+    where_sql = f"WHERE {filter_expr}" if filter_expr else ""
+    total_matching = con.execute(f'SELECT COUNT(*) FROM "{view_name}" {where_sql};').fetchone()[0]
 
-    if df_dist.empty:
-        console.print(f"[red]No trades found for pattern '{pattern}' in view '{view_name}'.[/red]")
+    if total_matching == 0:
+        filter_desc = f"pattern '{pattern}'" if pattern else "all trades"
+        console.print(f"[red]No trades found for {filter_desc} in view '{view_name}'.[/red]")
         con.close()
         if tee:
             sys.stdout = orig_stdout
         return
 
-    # Print Step 1: entry_2 breakdown table
+    # Section 1: entry_1 Performance Breakdown
+    console.print(f"[bold cyan]─── SECTION 1: ENTRY_1 PERFORMANCE BREAKDOWN ───[/bold cyan]")
     generate_distribution_table(
         db_path=db_path,
         view_name=view_name,
-        pattern_col="entry_2",
+        pattern_col="entry_1",
         pattern_filter=filter_expr,
         output_fmt=args.output,
     )
 
-    # Step 2: Extract distinct entry_2 groups
-    entry_2_groups = df_dist["pattern"].tolist()
+    # Section 2: Holding Duration Distribution
+    console.print(f"\n[bold cyan]─── SECTION 2: HOLDING DURATION DISTRIBUTION ───[/bold cyan]")
+    generate_duration_table(
+        db_path=db_path,
+        view_name=view_name,
+        pattern_filter=filter_expr,
+        output_fmt=args.output,
+    )
 
-    console.print(f"\n[bold magenta]─── DURATION BREAKDOWNS FOR ALL {len(entry_2_groups)} ENTRY_2 GROUPS ───[/bold magenta]")
-
-    # Step 3: For each entry_2 group, display duration breakdown
-    for e2 in entry_2_groups:
-        nested_filter = f"entry_1 = '{pattern}' AND entry_2 = '{e2}'"
-        generate_duration_table(
-            db_path=db_path,
-            view_name=view_name,
-            pattern_filter=nested_filter,
-            output_fmt=args.output,
-        )
+    # Section 3: The 6 Candlestick Pattern Distribution Classes
+    if not args.skip_candlestick_patterns:
+        available_cdl_cols = [c for c in CANDLESTICK_PATTERN_COLS if c[0] in cols]
+        if available_cdl_cols:
+            console.print(f"\n[bold cyan]─── SECTION 3: CANDLESTICK PATTERN DISTRIBUTIONS ({len(available_cdl_cols)} CLASSES) ───[/bold cyan]")
+            for col_name, col_desc in available_cdl_cols:
+                console.print(f"\n[bold green]► {col_desc.upper()}[/bold green]")
+                generate_distribution_table(
+                    db_path=db_path,
+                    view_name=view_name,
+                    pattern_col=col_name,
+                    pattern_filter=filter_expr,
+                    output_fmt=args.output,
+                )
 
     con.close()
 
@@ -217,12 +258,16 @@ def main():
         sys.stdout = orig_stdout
         dump_fmt = get_default_dump_format()
         
+        safe_v = view_name.replace('"', '')
+        outs_dir = _REPO_ROOT / "Shared" / "OUTs"
+        outs_dir.mkdir(parents=True, exist_ok=True)
+
         if args.dump == "default":
-            safe_p = pattern.replace("-", "_")
-            safe_v = view_name.replace('"', '')
-            outs_dir = _REPO_ROOT / "Shared" / "OUTs"
-            outs_dir.mkdir(parents=True, exist_ok=True)
-            dump_file = outs_dir / f"pattern_profile_{safe_p}_{safe_v}.{dump_fmt}"
+            if pattern:
+                safe_p = pattern.replace("-", "_")
+                dump_file = outs_dir / f"pattern_profile_{safe_p}_{safe_v}.{dump_fmt}"
+            else:
+                dump_file = outs_dir / f"pattern_profile_entry_1_{safe_v}.{dump_fmt}"
         else:
             custom_path = Path(args.dump)
             if not custom_path.suffix:
