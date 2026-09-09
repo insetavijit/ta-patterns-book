@@ -28,6 +28,7 @@ trade-book-charts = "trade_book_charts.cli:main"
 trade-view = "trade_book_charts.cli:main"
 tradebook-tool = "trade_book_charts.cli:main"
 vbtspike = "vbtspike.cli:cli"
+pfib-engine = "ta_patterns_book.level_touch.post_exit:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]
