@@ -710,6 +710,22 @@ def generate_all_distributions(
                 pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, output_fmt=output_fmt
             )
 
+    # 8. Post-Exit Fibonacci Excursion & Invalidation Distributions (if present)
+    pfib_cols = [
+        "pfib15_bsl", "pfib15_sl_hit", "pfib15_be_hit",
+        "pfib30_bsl", "pfib30_sl_hit", "pfib30_be_hit",
+        "pfib60_bsl", "pfib60_sl_hit", "pfib60_be_hit",
+        "pfib_bsl", "pfib_sl_hit", "pfib_be_hit",
+    ]
+    seen_pfib = set()
+    for pf_col in pfib_cols:
+        if pf_col in cols and pf_col not in seen_pfib:
+            seen_pfib.add(pf_col)
+            generate_distribution_table(
+                db_path, view_name=view_name, pattern_col=pf_col, losses_only=losses_only, wins_only=wins_only,
+                pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, output_fmt=output_fmt
+            )
+
 
 
 def generate_head_table(

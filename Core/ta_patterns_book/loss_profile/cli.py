@@ -74,6 +74,23 @@ def main():
             raise
         pass
 
+    # Normalize distribution and dump inputs (stripping curly braces if passed like {entry_1,entry_2})
+    if args.distribution:
+        args.distribution = args.distribution.strip("{} \t\r\n")
+    if args.dump:
+        args.dump = args.dump.strip("{} \t\r\n")
+
+    # If --dump was passed with 'all' or comma-separated axes:
+    if args.dump and args.dump != "default":
+        dump_val = args.dump.strip()
+        if dump_val.lower() == "all":
+            if args.distribution is None:
+                args.distribution = "all"
+        elif not any(dump_val.lower().endswith(ext) for ext in [".txt", ".md", ".json", ".csv", ".log"]):
+            # User passed an axis or list of axes to --dump (e.g. --dump entry_1,entry_2)
+            if args.distribution is None:
+                args.distribution = dump_val
+
     output_fmt = "markdown" if args.output in ["markdown", "md"] else "text"
 
     tee = None
@@ -96,21 +113,41 @@ def main():
                 output_fmt=output_fmt,
             )
         elif args.distribution is not None:
-            generate_distribution(
-                db_path,
-                axis=args.distribution,
-                view_name=args.view,
-                losses_only=args.losses_only,
-                wins_only=args.wins_only,
-                pattern_filter=args.pattern_filter,
-                duration_till=args.duration_till,
-                min_trades=args.min_trades,
-                sort=args.sort,
-                top=args.top,
-                bottom=args.bottom,
-                compare=args.compare,
-                output_fmt=output_fmt,
-            )
+            raw_axis = args.distribution.strip()
+            if "," in raw_axis:
+                axis_list = [a.strip() for a in raw_axis.split(",") if a.strip()]
+                for ax in axis_list:
+                    generate_distribution(
+                        db_path,
+                        axis=ax,
+                        view_name=args.view,
+                        losses_only=args.losses_only,
+                        wins_only=args.wins_only,
+                        pattern_filter=args.pattern_filter,
+                        duration_till=args.duration_till,
+                        min_trades=args.min_trades,
+                        sort=args.sort,
+                        top=args.top,
+                        bottom=args.bottom,
+                        compare=args.compare,
+                        output_fmt=output_fmt,
+                    )
+            else:
+                generate_distribution(
+                    db_path,
+                    axis=raw_axis,
+                    view_name=args.view,
+                    losses_only=args.losses_only,
+                    wins_only=args.wins_only,
+                    pattern_filter=args.pattern_filter,
+                    duration_till=args.duration_till,
+                    min_trades=args.min_trades,
+                    sort=args.sort,
+                    top=args.top,
+                    bottom=args.bottom,
+                    compare=args.compare,
+                    output_fmt=output_fmt,
+                )
         elif args.projected_rr:
             generate_distribution(
                 db_path,
@@ -149,22 +186,36 @@ def main():
             sys.stdout = orig_stdout
             from .reporters import save_dump_file
             from rich.console import Console
-            axis_name = (
-                args.distribution
-                or ("monthly" if args.monthly is not None else None)
-                or ("weekly" if args.weekly else None)
-                or ("duration" if (args.duration_group or args.duration_till is not None or args.duration is not None) else None)
-                or ("prr" if args.projected_rr else None)
-                or ("loss" if args.loss_group else None)
-                or ("head" if args.head is not None else None)
-                or "profile"
-            )
+
+            dump_val = args.dump.strip()
+            if dump_val.lower() == "all":
+                axis_name = "all"
+                custom_file = None
+            elif any(dump_val.lower().endswith(ext) for ext in [".txt", ".md", ".json", ".csv", ".log"]):
+                axis_name = "dump"
+                custom_file = dump_val
+            elif dump_val != "default":
+                axis_name = dump_val.replace(",", "_").replace(" ", "")
+                custom_file = None
+            else:
+                axis_name = (
+                    (args.distribution.replace(",", "_").replace(" ", "") if args.distribution else None)
+                    or ("monthly" if args.monthly is not None else None)
+                    or ("weekly" if args.weekly else None)
+                    or ("duration" if (args.duration_group or args.duration_till is not None or args.duration is not None) else None)
+                    or ("prr" if args.projected_rr else None)
+                    or ("loss" if args.loss_group else None)
+                    or ("head" if args.head is not None else None)
+                    or "profile"
+                )
+                custom_file = None
+
             clean_text = tee.get_clean_text()
             dump_path = save_dump_file(
                 content=clean_text,
                 view_name=args.view,
                 axis_name=axis_name,
-                custom_name=args.dump,
+                custom_name=custom_file,
                 output_fmt=output_fmt,
             )
             Console().print(f"\n[bold green]✓ Dumped stdio tables to: {dump_path}[/bold green]\n")
