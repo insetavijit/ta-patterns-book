@@ -30,7 +30,17 @@
      - `uv run trade-book-charts tradebook`: Render SmartGrid trade playbook PNGs.
      - Supports `--limit` / `-l` flag to specify charts per page (auto-paginating to `p1.png`, `p2.png`, etc.).
 
-3. **DuckDB Explorer CLI**:
+3. **Post-Trade Excursion Analysis CLI (`post-trade-analysis` / `pfib-engine`)**:
+   - **Location**: [`Core/post_trade_analysis/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/post_trade_analysis/)
+   - **CLI Commands**:
+     - `uv run post-trade-analysis --strategy classic_floor_mod_v4c`: Multi-horizon (15, 30, 60 candles) post-exit Fibonacci runner excursion analysis.
+     - `uv run pfib-engine --strategy classic_floor_mod_v4c`: Backward-compatible alias.
+   - **Architecture**:
+     - `engine.py`: Single-pass multi-horizon excursion tracking, SL/BE invalidation, and table/view synchronization in DuckDB.
+     - `constants.py`: 14-ratio Fibonacci extension grid and default horizons (15, 30, 60).
+     - `cli.py`: Argument parser and borderless Rich summary table formatting.
+
+4. **DuckDB Explorer CLI**:
    - **Location**: [`Utils/duckdb-explorar-tool/duckdb_explorer.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/duckdb-explorar-tool/duckdb_explorer.py)
    - Read-only inspection, schema profiling, Pandas transformations, and SQL query runner.
 
