@@ -1,6 +1,7 @@
 """CLI entry point for loss_profile package."""
 
 import argparse
+import sys
 from .db import get_duckdb_path
 from .reporters import (
     generate_distribution,
@@ -40,6 +41,7 @@ def main():
     parser.add_argument("--compare", type=str, default=None, help="Cross-axis side-by-side pivot comparison axis (e.g. --dist prr --compare entry_1)")
     parser.add_argument("--loss", nargs="?", const=12, type=int, default=None, help="Show head of losing trades table & render Trade Playbook (default limit: 12)")
     parser.add_argument("--output", "--fmt", "-o", choices=["text", "markdown", "md"], default="text", help="Output format: 'text' (default) or 'markdown'/'md'")
+    parser.add_argument("--dump", nargs="?", const="default", type=str, default=None, help="Dump stdio tables into a text file in Shared/OUTs/ (default: Shared/OUTs/loss_profile_<view>_<axis>.txt)")
 
     args = parser.parse_args()
 
@@ -74,67 +76,100 @@ def main():
 
     output_fmt = "markdown" if args.output in ["markdown", "md"] else "text"
 
-    if args.head is not None:
-        generate_head_table(
-            db_path,
-            view_name=args.view,
-            limit=args.head,
-            pattern_filter=args.pattern_filter,
-            duration=args.duration,
-            duration_till=args.duration_till,
-            losses_only=args.losses_only,
-            output_fmt=output_fmt,
-        )
-    elif args.distribution is not None:
-        generate_distribution(
-            db_path,
-            axis=args.distribution,
-            view_name=args.view,
-            losses_only=args.losses_only,
-            wins_only=args.wins_only,
-            pattern_filter=args.pattern_filter,
-            duration_till=args.duration_till,
-            min_trades=args.min_trades,
-            sort=args.sort,
-            top=args.top,
-            bottom=args.bottom,
-            compare=args.compare,
-            output_fmt=output_fmt,
-        )
-    elif args.projected_rr:
-        generate_distribution(
-            db_path,
-            axis="prr",
-            view_name=args.view,
-            losses_only=args.losses_only,
-            pattern_filter=args.pattern_filter,
-            output_fmt=output_fmt,
-        )
-    elif args.loss_group:
-        generate_distribution(
-            db_path,
-            axis="loss",
-            view_name=args.view,
-            pattern_filter=args.pattern_filter,
-            output_fmt=output_fmt,
-        )
-    elif args.duration_group or args.duration_till is not None or args.duration is not None:
-        generate_distribution(
-            db_path,
-            axis="duration",
-            view_name=args.view,
-            duration_till=args.duration_till,
-            losses_only=args.losses_only,
-            pattern_filter=args.pattern_filter,
-            output_fmt=output_fmt,
-        )
-    elif args.weekly:
-        generate_weekly_table(db_path, view_name=args.view, output_fmt=output_fmt)
-    elif args.monthly is not None or args.loss is not None:
-        generate_monthly_table(db_path, view_name=args.view, month_filter=args.monthly, show_loss_head=args.loss, output_fmt=output_fmt)
-    else:
-        generate_loss_profile(db_path, view_name=args.view)
+    tee = None
+    orig_stdout = sys.stdout
+    if args.dump:
+        from .reporters import TeeStream
+        tee = TeeStream(orig_stdout)
+        sys.stdout = tee
+
+    try:
+        if args.head is not None:
+            generate_head_table(
+                db_path,
+                view_name=args.view,
+                limit=args.head,
+                pattern_filter=args.pattern_filter,
+                duration=args.duration,
+                duration_till=args.duration_till,
+                losses_only=args.losses_only,
+                output_fmt=output_fmt,
+            )
+        elif args.distribution is not None:
+            generate_distribution(
+                db_path,
+                axis=args.distribution,
+                view_name=args.view,
+                losses_only=args.losses_only,
+                wins_only=args.wins_only,
+                pattern_filter=args.pattern_filter,
+                duration_till=args.duration_till,
+                min_trades=args.min_trades,
+                sort=args.sort,
+                top=args.top,
+                bottom=args.bottom,
+                compare=args.compare,
+                output_fmt=output_fmt,
+            )
+        elif args.projected_rr:
+            generate_distribution(
+                db_path,
+                axis="prr",
+                view_name=args.view,
+                losses_only=args.losses_only,
+                pattern_filter=args.pattern_filter,
+                output_fmt=output_fmt,
+            )
+        elif args.loss_group:
+            generate_distribution(
+                db_path,
+                axis="loss",
+                view_name=args.view,
+                pattern_filter=args.pattern_filter,
+                output_fmt=output_fmt,
+            )
+        elif args.duration_group or args.duration_till is not None or args.duration is not None:
+            generate_distribution(
+                db_path,
+                axis="duration",
+                view_name=args.view,
+                duration_till=args.duration_till,
+                losses_only=args.losses_only,
+                pattern_filter=args.pattern_filter,
+                output_fmt=output_fmt,
+            )
+        elif args.weekly:
+            generate_weekly_table(db_path, view_name=args.view, output_fmt=output_fmt)
+        elif args.monthly is not None or args.loss is not None:
+            generate_monthly_table(db_path, view_name=args.view, month_filter=args.monthly, show_loss_head=args.loss, output_fmt=output_fmt)
+        else:
+            generate_loss_profile(db_path, view_name=args.view)
+    finally:
+        if args.dump and tee is not None:
+            sys.stdout = orig_stdout
+            from .reporters import save_dump_file
+            from rich.console import Console
+            axis_name = (
+                args.distribution
+                or ("monthly" if args.monthly is not None else None)
+                or ("weekly" if args.weekly else None)
+                or ("duration" if (args.duration_group or args.duration_till is not None or args.duration is not None) else None)
+                or ("prr" if args.projected_rr else None)
+                or ("loss" if args.loss_group else None)
+                or ("head" if args.head is not None else None)
+                or "profile"
+            )
+            clean_text = tee.get_clean_text()
+            dump_path = save_dump_file(
+                content=clean_text,
+                view_name=args.view,
+                axis_name=axis_name,
+                custom_name=args.dump,
+                output_fmt=output_fmt,
+            )
+            Console().print(f"\n[bold green]✓ Dumped stdio tables to: {dump_path}[/bold green]\n")
 
 
 if __name__ == "__main__":
     main()
+

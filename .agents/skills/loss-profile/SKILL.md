@@ -57,6 +57,7 @@ The `--dist` (or `--distribution`) flag partitions strategy performance across s
 | `prr` | Projected Risk-to-Reward ratio brackets | `01. < 2.0 RR`, `02. 2.0 - 3.0 RR`, `05. >= 5.0 RR` |
 | `monthly` | Calendar month breakdown | `2025-01`, `2025-02`, etc. |
 | `weekly` | Calendar week breakdown | `W01`, `W02`, etc. |
+| `all` (`*`) | Comprehensive suite of all available distributions (monthly, weekly, duration, prr, loss, entry_1..4, epcpatt_1..3, ecpatt_1..3) | All analytical tables |
 
 ### Candle Pattern Nomenclature
 - **Direction**: `U` (Up: Close >= Prev Close) or `D` (Down: Close < Prev Close).
@@ -89,6 +90,7 @@ You can compose any distribution axis with filtering and sorting modifiers:
 
 ### Formatting & Output
 - `--output {text,markdown}` (or `-o md`): Render tables in rich borderless terminal format (`text`, default) or pure GFM Markdown (`markdown`).
+- `--dump [FILENAME]`: Cleanly dumps the stdio tables into a `.txt` file in `Shared/OUTs/` (e.g. `Shared/OUTs/loss_profile_<view>_<axis>.txt`).
 - `--head [N]`: Print the first $N$ individual matching trade rows (default 10).
 - `--loss [N]`: Print losing trades head and render SmartGrid Playbook canvas PNG to `Shared/OUTs/png/`.
 

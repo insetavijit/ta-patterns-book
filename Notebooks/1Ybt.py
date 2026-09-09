@@ -165,6 +165,8 @@ def simulate_signals(
             s1_val = None
             r1_val = None
             signal_time = None
+            fib_bsl = None
+            fib_bsl_ambiguous = None
 
             if trades_df is not None and not trades_df.empty:
                 if "sl_price" in trades_df.columns and entry_idx < len(trades_df):
@@ -195,6 +197,20 @@ def simulate_signals(
                     v = trades_df["signal_time"].iloc[entry_idx]
                     if pd.notna(v):
                         signal_time = v.to_pydatetime() if hasattr(v, "to_pydatetime") else v
+                if "fib_bsl" in trades_df.columns:
+                    for idx in (exit_idx, entry_idx):
+                        if idx < len(trades_df):
+                            v = trades_df["fib_bsl"].iloc[idx]
+                            if pd.notna(v):
+                                fib_bsl = float(v)
+                                break
+                if "fib_bsl_ambiguous" in trades_df.columns:
+                    for idx in (exit_idx, entry_idx):
+                        if idx < len(trades_df):
+                            v = trades_df["fib_bsl_ambiguous"].iloc[idx]
+                            if pd.notna(v):
+                                fib_bsl_ambiguous = bool(v)
+                                break
 
             size_val = init_cash / entry_price
             risk_amount = abs(entry_price - sl_price) * size_val if (sl_price is not None and sl_price > 0) else None
@@ -233,6 +249,8 @@ def simulate_signals(
                 "holding_bars": holding_bars,
                 "holding_seconds": holding_seconds,
                 "is_win": net_pnl > 0,
+                "fib_bsl": fib_bsl,
+                "fib_bsl_ambiguous": fib_bsl_ambiguous,
                 "notes": None,
             })
             pos = 0
@@ -431,6 +449,8 @@ def ensure_db_schema(con: duckdb.DuckDBPyConnection) -> None:
             holding_bars BIGINT,
             holding_seconds BIGINT,
             is_win BOOLEAN,
+            fib_bsl DOUBLE,
+            fib_bsl_ambiguous BOOLEAN,
             PRIMARY KEY (fingerprint, vbt_trade_id)
         );
     """)
@@ -448,6 +468,8 @@ def ensure_db_schema(con: duckdb.DuckDBPyConnection) -> None:
         ('"pivot"', "DOUBLE"),
         ("s1", "DOUBLE"),
         ("r1", "DOUBLE"),
+        ("fib_bsl", "DOUBLE"),
+        ("fib_bsl_ambiguous", "BOOLEAN"),
     ]:
         try:
             con.execute(f"ALTER TABLE trades ADD COLUMN IF NOT EXISTS {col} {ctype}")
@@ -526,7 +548,9 @@ def create_strategy_views(
             t.r1,
             t.holding_bars,
             t.holding_seconds,
-            t.is_win{patterns_cols}
+            t.is_win,
+            t.fib_bsl,
+            t.fib_bsl_ambiguous{patterns_cols}
         FROM trades t
         JOIN test_runs r ON t.fingerprint = r.fingerprint
         {patterns_join}
@@ -721,8 +745,9 @@ def persist_results(
                     size, entry_fees, exit_fees, pnl, return_pct,
                     risk_amount, r_multiple, projected_rr,
                     "pivot", s1, r1,
-                    holding_bars, holding_seconds, is_win
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    holding_bars, holding_seconds, is_win,
+                    fib_bsl, fib_bsl_ambiguous
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 t["vbt_trade_id"], fp, t.get("trade_id", t["vbt_trade_id"]), t["direction"], t["status"],
                 t["entry_time"], t["exit_time"], t.get("signal_time"), t["entry_price"], t["exit_price"],
@@ -730,7 +755,8 @@ def persist_results(
                 t["size"], t["entry_fees"], t["exit_fees"], t["pnl"], t["return_pct"],
                 t.get("risk_amount"), t.get("r_multiple"), t.get("projected_rr"),
                 t.get("pivot"), t.get("s1"), t.get("r1"),
-                t["holding_bars"], t["holding_seconds"], t["is_win"]
+                t["holding_bars"], t["holding_seconds"], t["is_win"],
+                t.get("fib_bsl"), t.get("fib_bsl_ambiguous")
             ])
 
     strategy_name = next(

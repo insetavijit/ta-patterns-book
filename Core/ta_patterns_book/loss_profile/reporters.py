@@ -1,7 +1,9 @@
 """Single Orchestration File for Loss Profiler reporting & display formatting."""
 
+import io
 import os
 import re
+from pathlib import Path
 import duckdb
 import pandas as pd
 from rich.console import Console
@@ -9,7 +11,7 @@ from rich.table import Table
 from trade_book_charts import generate_trade_book
 from trade_book_charts.db import _load_tradebook_deps, build_ohlcv_column_map
 
-from .db import get_db_connection, get_outs_dir, load_config
+from .db import PROJECT_ROOT, get_db_connection, get_outs_dir, load_config
 from .sql import (
     build_distribution_query,
     build_duration_query,
@@ -19,6 +21,44 @@ from .sql import (
     build_projected_rr_group_query,
     build_weekly_query,
 )
+
+
+class TeeStream:
+    """Simultaneously writes to terminal stdout and an in-memory buffer."""
+    def __init__(self, original_stream):
+        self.original_stream = original_stream
+        self.buffer = io.StringIO()
+
+    def write(self, data):
+        self.original_stream.write(data)
+        self.buffer.write(data)
+
+    def flush(self):
+        self.original_stream.flush()
+
+    def get_clean_text(self) -> str:
+        """Return captured text with ANSI escape codes stripped."""
+        raw = self.buffer.getvalue()
+        return re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", raw)
+
+
+def save_dump_file(content: str, view_name: str, axis_name: str = "dist", custom_name: str = None, output_fmt: str = "text") -> Path:
+    """Save cleaned stdio text or markdown dump into Shared/OUTs/ directory."""
+    outs_dir = Path(PROJECT_ROOT) / "Shared" / "OUTs"
+    outs_dir.mkdir(parents=True, exist_ok=True)
+
+    if custom_name and custom_name != "default":
+        custom_p = Path(custom_name)
+        dump_path = custom_p if custom_p.is_absolute() else (outs_dir / custom_p.name)
+    else:
+        ext = "md" if output_fmt in ["markdown", "md"] else "txt"
+        safe_v = re.sub(r"[^a-zA-Z0-9_]", "_", view_name)
+        safe_a = re.sub(r"[^a-zA-Z0-9_]", "_", axis_name or "dist")
+        dump_path = outs_dir / f"loss_profile_{safe_v}_{safe_a}.{ext}"
+
+    dump_path.write_text(content, encoding="utf-8")
+    return dump_path
+
 
 
 def print_dataframe(df: pd.DataFrame, title_text: str = None, totals_str: str = None, output_fmt: str = "text"):
@@ -447,6 +487,7 @@ def generate_distribution_table(
 
 
 AXIS_ALIASES = {
+    "all": "all", "*": "all",
     "prr": "prr", "rr": "prr", "projected_rr": "prr",
     "duration": "duration", "dur": "duration", "candles": "duration",
     "loss": "loss", "pnl": "loss", "loss_group": "loss",
@@ -567,7 +608,12 @@ def generate_distribution(
 
     resolved = AXIS_ALIASES.get(str(axis).lower(), axis)
 
-    if resolved == "prr":
+    if resolved == "all":
+        generate_all_distributions(
+            db_path, view_name=view_name, losses_only=losses_only, wins_only=wins_only,
+            pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, output_fmt=output_fmt
+        )
+    elif resolved == "prr":
         generate_projected_rr_table(
             db_path, view_name=view_name, losses_only=losses_only, wins_only=wins_only,
             pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, top=top, bottom=bottom, output_fmt=output_fmt
@@ -594,6 +640,76 @@ def generate_distribution(
             db_path, view_name=view_name, pattern_col=resolved, losses_only=losses_only, wins_only=wins_only,
             pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, top=top, bottom=bottom, output_fmt=output_fmt
         )
+
+
+def generate_all_distributions(
+    db_path: str,
+    view_name: str = "trades",
+    losses_only: bool = False,
+    wins_only: bool = False,
+    pattern_filter: str = None,
+    min_trades: int = None,
+    sort: str = None,
+    output_fmt: str = "text",
+):
+    """Executes all available distributions (monthly, weekly, duration, prr, loss, state patterns, and candlestick pattern classes)."""
+    con = get_db_connection(db_path, read_only=True)
+    cols_df = con.execute(f'SELECT * FROM "{view_name}" LIMIT 0;').df()
+    con.close()
+    cols = list(cols_df.columns)
+    cols_lower = [c.lower() for c in cols]
+
+    console = Console()
+    console.print(f"\n[bold cyan]═════════════════════════════════════════════════════════════════════════════════[/bold cyan]")
+    console.print(f"[bold cyan]             COMPREHENSIVE STRATEGY PERFORMANCE DISTRIBUTIONS                   [/bold cyan]")
+    console.print(f"[bold cyan]             View: {view_name}                                                  [/bold cyan]")
+    console.print(f"[bold cyan]═════════════════════════════════════════════════════════════════════════════════[/bold cyan]\n")
+
+    # 1. Monthly Performance
+    generate_monthly_table(db_path, view_name=view_name, output_fmt=output_fmt)
+
+    # 2. Weekly Performance
+    generate_weekly_table(db_path, view_name=view_name, output_fmt=output_fmt)
+
+    # 3. Holding Duration
+    generate_duration_table(
+        db_path, view_name=view_name, losses_only=losses_only, wins_only=wins_only,
+        pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, output_fmt=output_fmt
+    )
+
+    # 4. Projected R:R Bracket Breakdown (if available)
+    if any(c in cols_lower for c in ["projected_rr", "prr"]):
+        generate_projected_rr_table(
+            db_path, view_name=view_name, losses_only=losses_only, wins_only=wins_only,
+            pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, output_fmt=output_fmt
+        )
+
+    # 5. Loss Amount Bracket Breakdown (if available)
+    if "pnl" in cols_lower:
+        generate_loss_group_table(
+            db_path, view_name=view_name, pattern_filter=pattern_filter, output_fmt=output_fmt
+        )
+
+    # 6. 3-Candle Setup State Patterns
+    for p_col in ["entry_1", "entry_2", "entry_3", "entry_4"]:
+        if p_col in cols:
+            generate_distribution_table(
+                db_path, view_name=view_name, pattern_col=p_col, losses_only=losses_only, wins_only=wins_only,
+                pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, output_fmt=output_fmt
+            )
+
+    # 7. Candlestick Pattern Classes (Single, Double, Triple setup & entry patterns)
+    candlestick_classes = [
+        "epcpatt_1", "epcpatt_2", "epcpatt_3",
+        "ecpatt_1", "ecpatt_2", "ecpatt_3",
+    ]
+    for c_col in candlestick_classes:
+        if c_col in cols:
+            generate_distribution_table(
+                db_path, view_name=view_name, pattern_col=c_col, losses_only=losses_only, wins_only=wins_only,
+                pattern_filter=pattern_filter, min_trades=min_trades, sort=sort, output_fmt=output_fmt
+            )
+
 
 
 def generate_head_table(
