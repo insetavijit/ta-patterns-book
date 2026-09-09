@@ -1,5 +1,25 @@
 """SQL Query Builders for Loss Profiler reporting."""
 
+import re
+
+
+def format_filter_expression(pattern_filter: str, target_pfx: str = "t.") -> str:
+    """Format and qualify a filter expression with table alias and type-safe quoting."""
+    filter_expr = pattern_filter.strip()
+    m = re.match(r"^([a-zA-Z0-9_]+)\s*(=|>=|<=|!=|<>|>|<)\s*(.+)$", filter_expr)
+    if m:
+        col, op, val = m.group(1), m.group(2), m.group(3).strip()
+        if op == "=" and not (val.startswith("'") or val.startswith('"')):
+            try:
+                float(val)
+            except ValueError:
+                val = f"'{val}'"
+        filter_expr = f"{col} {op} {val}"
+
+    if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
+        return f"{target_pfx}{filter_expr}"
+    return filter_expr
+
 
 def build_monthly_query(view_name: str = "trades", target_month: str = None, has_month_col: bool = True) -> str:
     if has_month_col:
@@ -54,16 +74,8 @@ def build_duration_query(
     if wins_only:
         where_clauses.append("t.pnl > 0")
     if pattern_filter:
-        filter_expr = pattern_filter.strip()
-        if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
-            col_part, val_part = filter_expr.split("=", 1)
-            filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
-        
         target_pfx = "t." if has_pattern_col else "p."
-        if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
-            where_clauses.append(f"{target_pfx}{filter_expr}")
-        else:
-            where_clauses.append(filter_expr)
+        where_clauses.append(format_filter_expression(pattern_filter, target_pfx))
 
     where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
     from_clause = f'"{view_name}" t' if (has_pattern_col or not pattern_filter) else f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number'
@@ -103,16 +115,8 @@ def build_loss_group_query(
 ) -> str:
     where_clauses = []
     if pattern_filter:
-        filter_expr = pattern_filter.strip()
-        if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
-            col_part, val_part = filter_expr.split("=", 1)
-            filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
-        
         target_pfx = "t." if has_pattern_col else "p."
-        if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
-            where_clauses.append(f"{target_pfx}{filter_expr}")
-        else:
-            where_clauses.append(filter_expr)
+        where_clauses.append(format_filter_expression(pattern_filter, target_pfx))
 
     where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
     from_clause = f'"{view_name}" t' if (has_pattern_col or not pattern_filter) else f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number'
@@ -159,16 +163,8 @@ def build_projected_rr_group_query(
     if wins_only:
         where_clauses.append("t.pnl > 0")
     if pattern_filter:
-        filter_expr = pattern_filter.strip()
-        if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
-            col_part, val_part = filter_expr.split("=", 1)
-            filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
-        
         target_pfx = "t." if has_pattern_col else "p."
-        if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
-            where_clauses.append(f"{target_pfx}{filter_expr}")
-        else:
-            where_clauses.append(filter_expr)
+        where_clauses.append(format_filter_expression(pattern_filter, target_pfx))
 
     prr_field = "t.projected_rr" if has_prr_col else "pr.projected_rr"
     if has_prr_col:
@@ -227,16 +223,8 @@ def build_distribution_query(
     if wins_only:
         where_clauses.append("t.pnl > 0")
     if pattern_filter:
-        filter_expr = pattern_filter.strip()
-        if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
-            col_part, val_part = filter_expr.split("=", 1)
-            filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
-        
         target_pfx = "t." if has_pattern_col else "p."
-        if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
-            where_clauses.append(f"{target_pfx}{filter_expr}")
-        else:
-            where_clauses.append(filter_expr)
+        where_clauses.append(format_filter_expression(pattern_filter, target_pfx))
 
     where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
@@ -287,15 +275,7 @@ def build_head_query(
     if duration_till is not None:
         where_clauses.append(f"t.duration_candel <= {duration_till}")
     if pattern_filter:
-        filter_expr = pattern_filter.strip()
-        if "=" in filter_expr and not ("'" in filter_expr or '"' in filter_expr):
-            col_part, val_part = filter_expr.split("=", 1)
-            filter_expr = f"{col_part.strip()} = '{val_part.strip()}'"
-        
-        if not filter_expr.startswith("p.") and not filter_expr.startswith("t."):
-            where_clauses.append(f"p.{filter_expr}")
-        else:
-            where_clauses.append(filter_expr)
+        where_clauses.append(format_filter_expression(pattern_filter, "p."))
 
     where_str = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
     from_clause = f'"{view_name}" t JOIN "3candels_patterns" p ON t.uid = p.trade_number' if pattern_filter else f'"{view_name}" t'
