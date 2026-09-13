@@ -1,3 +1,6 @@
 [submodule "Core/trade_book_charts"]
 	path = Core/trade_book_charts
 	url = git@github.com:insetavijit/trade-book-charts.git
+[submodule "Core/vbtspike"]
+	path = Core/vbtspike
+	url = git@github.com:insetavijit/vbtspike3A.git
