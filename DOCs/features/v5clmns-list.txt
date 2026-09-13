@@ -37,3 +37,12 @@ entry_1=Exact duplicate of epatt_1 (alias retained in strategy code for backward
 entry_2=Exact duplicate of epatt_2 (alias retained in strategy code for backwards compatibility with loss-profile CLI)
 entry_3=Exact duplicate of epatt_3 (alias retained in strategy code for backwards compatibility with loss-profile CLI)
 entry_4=Exact duplicate of epatt_4 (alias retained in strategy code for backwards compatibility with loss-profile CLI)
+
+---
+NEXT STRATEGY VERSION ARCHITECTURE PROPOSAL:
+- Rename 'r1' -> 'upper_pivot':
+  Adopts generalized, strategy-agnostic terminology for the upper channel/target level across different calculation methods (pivots, envelopes, dynamic bands), eliminating hardcoded Floor Trader 'R1' coupling.
+- Rename 's1' -> 'lower_pivot':
+  Symmetric generalized nomenclature for the lower boundary/support setup trigger level across multi-strategy engines.
+- Standardize 'epatt_1..4' as Canonical (Deprecate 'entry_1..4'):
+  Unifies all candle sequence classification under explicit execution-pattern ('epatt') nomenclature, removing payload duplication and standardizing database ingestion schemas.

@@ -102,3 +102,16 @@ Extracted via `ta_patterns_book.loss_profile.candles`:
 - **`epcpatt_1`** (`str`): 1st preceding candlestick pattern name.
 - **`epcpatt_2`** (`str`): 2nd preceding candlestick pattern name.
 - **`epcpatt_3`** (`str`): 3rd preceding candlestick pattern name.
+
+---
+
+## 3. Architecture Proposal for Next Strategy Version
+
+To establish a clean, strategy-agnostic architecture for the next strategy iteration, the following schema updates are proposed:
+
+1. **Rename `r1` $\rightarrow$ `upper_pivot`**:
+   - **Rationale**: Generalizes the upper boundary / target line across arbitrary channel algorithms (classic pivots, Woodie, Camarilla, Keltner/Bollinger envelopes), removing strategy-specific Floor Trader 'R1' coupling.
+2. **Rename `s1` $\rightarrow$ `lower_pivot`**:
+   - **Rationale**: Symmetrically generalizes the lower boundary / support trigger level for bounce and breakout strategies.
+3. **Standardize on `epatt_1..4` (Deprecate `entry_1..4`)**:
+   - **Rationale**: Standardizes all confirmation-anchored candle sequences under execution-pattern (`epatt`) taxonomy, eliminates redundant duplicate columns, and minimizes database payload.
