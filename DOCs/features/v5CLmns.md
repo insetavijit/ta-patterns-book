@@ -115,3 +115,21 @@ To establish a clean, strategy-agnostic architecture for the next strategy itera
    - **Rationale**: Symmetrically generalizes the lower boundary / support trigger level for bounce and breakout strategies.
 3. **Standardize on `epatt_1..4` (Deprecate `entry_1..4`)**:
    - **Rationale**: Standardizes all confirmation-anchored candle sequences under execution-pattern (`epatt`) taxonomy, eliminates redundant duplicate columns, and minimizes database payload.
+4. **Multi-tier Stop Loss Hierarchy**:
+   - `primary_sl`: Aggressive stop loss price anchored to the Close of the setup signal candle (Bar 0 Close).
+   - `pivot_sl`: Structural stop loss anchored to `lower_pivot` ($S_1$).
+   - `safe_sl`: Conservative dynamic stop loss set at $\text{swing\_low} - 0.5 \times (\text{upper\_pivot} - \text{lower\_pivot})$.
+5. **Trade-Level SL Breach Telemetry**:
+   - `primary_sl_hit`, `pivot_sl_hit`, `safe_sl_hit`: Boolean flags indicating if price reached or breached each SL level at any time during the trade lifecycle.
+6. **Risk Distances & Expectancy (PRR / R-Multiple)**:
+   - `risk_primary`, `risk_pivot`, `risk_safe`: Absolute price distances from entry to each stop level.
+   - `position_size`: Allocated account risk divided by active risk distance.
+   - `projected_rr_primary`, `projected_rr_safe`: Projected Risk:Reward ratios.
+   - `r_multiple`: Realized gain/loss normalized by active risk distance ($\text{realized\_pnl} / \text{active\_risk}$).
+7. **Lifecycle & Holding Duration**:
+   - `duration_candel`: Number of elapsed candles from entry to exit (required for native `loss-profile --dist duration` aggregation).
+   - `exit_time`: Exact timestamp of trade exit bar.
+8. **Excursion Extremes & Regime**:
+   - `mfe`: Maximum Favorable Excursion during trade lifecycle (identifies near-miss winners for break-even/trailing tuning).
+   - `mae`: Maximum Adverse Excursion during trade lifecycle (identifies drawdown threshold required for winning trades).
+   - `session`: Market trading session at trade entry (Asian, London, New York, Overlap).

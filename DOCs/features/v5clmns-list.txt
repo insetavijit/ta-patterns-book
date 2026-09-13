@@ -40,23 +40,45 @@ entry_4=Exact duplicate of epatt_4 (alias retained in strategy code for backward
 
 ---
 NEXT STRATEGY VERSION ARCHITECTURE PROPOSAL:
-- Rename 'r1' -> 'upper_pivot':
-  Adopts generalized, strategy-agnostic terminology for the upper channel/target level across different calculation methods (pivots, envelopes, dynamic bands), eliminating hardcoded Floor Trader 'R1' coupling.
-- Rename 's1' -> 'lower_pivot':
-  Symmetric generalized nomenclature for the lower boundary/support setup trigger level across multi-strategy engines.
-- Standardize 'epatt_1..4' as Canonical (Deprecate 'entry_1..4'):
-  Unifies all candle sequence classification under explicit execution-pattern ('epatt') nomenclature, removing payload duplication and standardizing database ingestion schemas.
+- Nomenclature Generalization:
+  upper_pivot=Generalized upper channel/target level (replaces hardcoded Floor Trader 'r1')
+  lower_pivot=Generalized lower boundary/support level (replaces hardcoded Floor Trader 's1')
+  Standardize 'epatt_1..4' as Canonical (deprecating duplicate 'entry_1..4' aliases)
+
 - Multi-tier Stop Loss Hierarchy:
   primary_sl=Aggressive stop loss price level anchored to the Close of the setup signal candle (Bar 0 Close)
   pivot_sl=Structural stop loss price level anchored to the lower_pivot support level (s1)
   safe_sl=Conservative dynamic stop loss set at swing_low minus half (upper_pivot - lower_pivot) range buffer (replaces legacy sl_price)
+
 - Multi-tier Trade-Level SL Breach Telemetry:
   primary_sl_hit=Boolean flag set to True if price touched or breached primary_sl (low <= primary_sl) at any point during trade lifecycle
   pivot_sl_hit=Boolean flag set to True if price touched or breached pivot_sl (low <= pivot_sl) at any point during trade lifecycle
   safe_sl_hit=Boolean flag set to True if price touched or breached safe_sl (low <= safe_sl) at any point during trade lifecycle
-- Risk & Capital Allocation Sizing:
-  position_size=Computed unit/lot position size based on allocated account risk budget divided by active stop loss distance
+
+- Risk Distances & Capital Allocation:
+  risk_primary=Absolute price risk distance to primary_sl (entry_price - primary_sl)
+  risk_pivot=Absolute price risk distance to pivot_sl (entry_price - pivot_sl)
+  risk_safe=Absolute price risk distance to safe_sl (entry_price - safe_sl)
+  position_size=Computed unit/lot position size based on allocated account risk budget divided by active risk distance
+
+- Projected Risk:Reward & Expectancy:
+  projected_rr_primary=Projected R:R ratio using primary_sl ((tp_price - entry_price) / risk_primary)
+  projected_rr_safe=Projected R:R ratio using safe_sl ((tp_price - entry_price) / risk_safe)
+  r_multiple=Realized return normalized by active risk distance (realized_pnl / active_risk)
+
+- Lifecycle & Duration Telemetry:
+  duration_candel=Total number of candles from trade entry to exit (required for loss-profile --dist duration)
+  exit_time=Timestamp of trade exit bar
+
+- In-Trade Excursion Extremes (MFE / MAE):
+  mfe=Maximum Favorable Excursion (highest price reached during trade minus entry_price)
+  mae=Maximum Adverse Excursion (entry_price minus lowest price reached during trade)
+
+- Temporal & Market Regime:
+  session=Market trading session at entry (Asian, London, New York, London/NY Overlap)
+
 - SL Optimization & Robustness Analytics (Why We Compute These Flags):
   1. Identifies premature stop-outs: where tighter SL was hit (primary_sl_hit=True) but wider SL survived to hit TP (safe_sl_hit=False, is_win=1).
   2. Identifies high-efficiency trades: where price never threatened tighter stops (primary_sl_hit=False, is_win=1), proving that a tighter primary_sl could have safely yielded a significantly higher R-multiple.
   3. Identifies runaway losses: where all stops were breached, indicating patterns where tighter stop execution would have preserved capital.
+  4. MFE/MAE Diagnostics: reveals near-miss winners (high MFE before hitting SL) as prime candidates for Break-Even (BE) and trailing stop rules.
