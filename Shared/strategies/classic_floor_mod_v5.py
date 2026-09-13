@@ -250,9 +250,11 @@ class ClassicFloorModV5:
                 if target_hit or stop_hit:
                     exits.iloc[i] = True
                     exit_price = t_target if target_hit else t_safe_sl
-                    pnl = exit_price - t_entry_price
-                    pnl_pct = (pnl / t_entry_price) * 100.0
-                    r_mult = pnl / trade["risk_safe"] if trade["risk_safe"] > 0 else np.nan
+                    pnl_points = exit_price - t_entry_price
+                    raw_ret = pnl_points / t_entry_price
+                    pnl_pct = raw_ret * 100.0
+                    monetary_pnl = pnl_points * trade["size"]
+                    r_mult = pnl_points / trade["risk_safe"] if trade["risk_safe"] > 0 else np.nan
                     h_bars = i - t_entry_bar
 
                     try:
@@ -274,7 +276,7 @@ class ClassicFloorModV5:
                     # Record on exit bar
                     exit_price_series[i] = exit_price
                     exit_time_series[i] = current_time
-                    realized_pnl_series[i] = pnl
+                    realized_pnl_series[i] = pnl_points
                     realized_pnl_pct_series[i] = pnl_pct
                     r_multiple_series[i] = r_mult
                     is_win_series[i] = 1 if target_hit else -1
@@ -302,7 +304,7 @@ class ClassicFloorModV5:
                         exit_price_series[t_entry_bar] = exit_price
                         exit_time_series[t_entry_bar] = current_time
                         exit_reason_series[t_entry_bar] = "TP" if target_hit else "SL"
-                        realized_pnl_series[t_entry_bar] = pnl
+                        realized_pnl_series[t_entry_bar] = pnl_points
                         realized_pnl_pct_series[t_entry_bar] = pnl_pct
                         r_multiple_series[t_entry_bar] = r_mult
                         is_win_series[t_entry_bar] = 1 if target_hit else -1
@@ -315,9 +317,9 @@ class ClassicFloorModV5:
                     trade_record["exit_time"] = current_time
                     trade_record["exit_price"] = exit_price
                     trade_record["exit_reason"] = "TP" if target_hit else "SL"
-                    trade_record["pnl"] = pnl
-                    trade_record["realized_pnl"] = pnl
-                    trade_record["return_pct"] = pnl_pct
+                    trade_record["pnl"] = monetary_pnl
+                    trade_record["realized_pnl"] = pnl_points
+                    trade_record["return_pct"] = raw_ret
                     trade_record["realized_pnl_pct"] = pnl_pct
                     trade_record["r_multiple"] = r_mult
                     trade_record["is_win"] = 1 if target_hit else -1

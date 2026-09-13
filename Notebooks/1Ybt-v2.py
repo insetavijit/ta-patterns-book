@@ -136,7 +136,12 @@ def compute_metrics_from_trades(
         loss_trades = [t for t in trades if t.get("is_win") in (False, -1, 0)]
         win_rate = len(win_trades) / total_trades
 
-        returns = [float(t.get("return_pct", 0.0)) / 100.0 if abs(float(t.get("return_pct", 0.0))) > 1.0 else float(t.get("return_pct", 0.0)) for t in trades]
+        returns = []
+        for t in trades:
+            r = float(t.get("return_pct", 0.0))
+            if abs(r) > 0.10:
+                r = r / 100.0
+            returns.append(r)
         total_return = float(np.prod([1.0 + r for r in returns]) - 1.0)
 
         pnls = [float(t.get("pnl", 0.0)) for t in trades]
@@ -387,6 +392,8 @@ def ensure_ohlcv_table(
         df_src = resample_ohlcv(df_src, target_timeframe=timeframe)
 
     df_ohlcv = df_src.reset_index()
+    if "index" in df_ohlcv.columns and "timestamp" not in df_ohlcv.columns:
+        df_ohlcv = df_ohlcv.rename(columns={"index": "timestamp"})
 
     con_tgt = duckdb.connect(target_db, read_only=False)
     con_tgt.register("df_ohlcv_temp", df_ohlcv)
@@ -786,8 +793,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-db",
-        default=None,
-        help="Target DuckDB database path (defaults to --db)",
+        default="Shared/Data/test_v5.duckdb",
+        help="Target DuckDB database path (defaults to Shared/Data/test_v5.duckdb)",
     )
     parser.add_argument(
         "--symbol",
