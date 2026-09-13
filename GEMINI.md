@@ -44,6 +44,19 @@
    - **Location**: [`Utils/duckdb-explorar-tool/duckdb_explorer.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/duckdb-explorar-tool/duckdb_explorer.py)
    - Read-only inspection, schema profiling, Pandas transformations, and SQL query runner.
 
+5. **VectorBT Backtest & Persistence CLI (`vbtspike`)**:
+   - **Location**: [`Core/vbtspike/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/vbtspike/)
+   - **CLI Commands**:
+     - `uv run vbtspike run --strategy classic_floor_mod_v2 --start 2025-01-01 --end 2025-01-31`: Run backtest with DuckDB trade ingestion.
+     - `uv run vbtspike clean --dry-run`: Inspect backtest tables and views scheduled for removal.
+     - `uv run vbtspike clean -y`: Clean database backtest artifacts.
+     - `uv run vbtspike backup`: Create on-demand snapshot of DuckDB database.
+   - **Architecture**:
+     - `Core/vbtspike/cli.py`: Click CLI runner, clean, and backup commands.
+     - `Core/vbtspike/simulation/`: VectorBT backtest orchestration and telemetry derivation.
+     - `Core/vbtspike/storage/`: DuckDB writer, view synchronization, snapshot management.
+     - `Core/vbtspike/integrity/`: Schema validation and pre/post flight assertions.
+
 ---
 
 ## Database Schemas & Key Conventions

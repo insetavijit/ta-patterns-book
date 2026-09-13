@@ -20,6 +20,7 @@ dependencies = [
     "tabulate>=0.10.0",
     "vectorbt>=0.26.2",
     "trade-book-charts",
+    "vbtspike",
 ]
 
 [project.scripts]
@@ -40,7 +41,11 @@ build-backend = "setuptools.build_meta"
 where = ["Core"]
 
 [tool.uv.workspace]
-members = ["Core/trade_book_charts"]
+members = [
+    "Core/trade_book_charts",
+    "Core/vbtspike",
+]
 
 [tool.uv.sources]
 trade-book-charts = { workspace = true }
+vbtspike = { workspace = true }

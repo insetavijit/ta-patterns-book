@@ -14,6 +14,7 @@ resolution-markers = [
 members = [
     "ta-patterns-book",
     "trade-book-charts",
+    "vbtspike",
 ]
 
 [[package]]
@@ -1547,6 +1548,7 @@ dependencies = [
     { name = "ta-patterns" },
     { name = "tabulate" },
     { name = "trade-book-charts" },
+    { name = "vbtspike" },
     { name = "vectorbt" },
 ]
 
@@ -1566,6 +1568,7 @@ requires-dist = [
     { name = "ta-patterns", specifier = ">=1.1.1" },
     { name = "tabulate", specifier = ">=0.10.0" },
     { name = "trade-book-charts", editable = "Core/trade_book_charts" },
+    { name = "vbtspike", editable = "Core/vbtspike" },
     { name = "vectorbt", specifier = ">=0.26.2" },
 ]
 
@@ -1677,6 +1680,29 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", size = 433602, upload-time = "2026-05-07T16:13:18.596Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
+]
+
+[[package]]
+name = "vbtspike"
+version = "0.1.0"
+source = { editable = "Core/vbtspike" }
+dependencies = [
+    { name = "click" },
+    { name = "duckdb" },
+    { name = "pandas" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "vectorbt" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.1" },
+    { name = "duckdb", specifier = ">=1.1.0" },
+    { name = "pandas", specifier = ">=2.2.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rich", specifier = ">=13.0.0" },
+    { name = "vectorbt", specifier = ">=0.26.2" },
 ]
 
 [[package]]
