@@ -1,8 +1,6 @@
 pivot=20-period rolling Floor Trader Pivot level ((High20 + Low20 + PrevClose) / 3)
 s1=First floor support level ((2 * pivot) - High20)
 r1=First floor resistance level and frozen Take Profit target ((2 * pivot) - Low20)
-upper_pivot=Alias for r1 resistance level
-lower_pivot=Alias for s1 support level
 entries=Boolean flag indicating trade entry on confirmation candle Open (Bar +3)
 exits=Boolean flag indicating trade exit when Take Profit or Stop Loss is reached
 in_trade=Boolean flag indicating active in-position candle
@@ -24,13 +22,18 @@ epatt_1=3 setup candles strictly before entry bar in Direction+Color format (pos
 epatt_2=2 setup candles before entry plus entry candle in Direction+Color format (pos-2, pos-1, pos)
 epatt_3=Straddle pattern around entry candle in Direction+Color format (pos-1, pos, pos+1)
 epatt_4=4-candle forward follow-through pattern in Direction+Color format (pos, pos+1, pos+2, pos+3)
-entry_1=Alias for epatt_1 for backwards compatibility with loss-profile CLI tools
-entry_2=Alias for epatt_2 for backwards compatibility with loss-profile CLI tools
-entry_3=Alias for epatt_3 for backwards compatibility with loss-profile CLI tools
-entry_4=Alias for epatt_4 for backwards compatibility with loss-profile CLI tools
 ecpatt_1=1st confirmation candlestick pattern classification name
 ecpatt_2=2nd confirmation candlestick pattern classification name
 ecpatt_3=3rd confirmation candlestick pattern classification name
 epcpatt_1=1st preceding candlestick pattern classification name
 epcpatt_2=2nd preceding candlestick pattern classification name
 epcpatt_3=3rd preceding candlestick pattern classification name
+
+---
+REMOVED DUPLICATE ALIASES:
+upper_pivot=Exact duplicate of r1 (semantic alias for the upper pivot line)
+lower_pivot=Exact duplicate of s1 (semantic alias for the lower pivot line)
+entry_1=Exact duplicate of epatt_1 (alias retained in strategy code for backwards compatibility with loss-profile CLI)
+entry_2=Exact duplicate of epatt_2 (alias retained in strategy code for backwards compatibility with loss-profile CLI)
+entry_3=Exact duplicate of epatt_3 (alias retained in strategy code for backwards compatibility with loss-profile CLI)
+entry_4=Exact duplicate of epatt_4 (alias retained in strategy code for backwards compatibility with loss-profile CLI)
