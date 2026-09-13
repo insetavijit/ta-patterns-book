@@ -10,6 +10,12 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "ta-patterns-book",
+    "trade-book-charts",
+]
+
 [[package]]
 name = "anywidget"
 version = "0.11.0"
@@ -1540,6 +1546,7 @@ dependencies = [
     { name = "seaborn" },
     { name = "ta-patterns" },
     { name = "tabulate" },
+    { name = "trade-book-charts" },
     { name = "vectorbt" },
 ]
 
@@ -1558,6 +1565,7 @@ requires-dist = [
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "ta-patterns", specifier = ">=1.1.1" },
     { name = "tabulate", specifier = ">=0.10.0" },
+    { name = "trade-book-charts", editable = "Core/trade_book_charts" },
     { name = "vectorbt", specifier = ">=0.26.2" },
 ]
 
@@ -1598,6 +1606,29 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/21/3b/6c24bec5be5e743ffd99576daa5cc077722fc7d5bbc00bd133fa0c698dc6/tqdm-4.70.0.tar.gz", hash = "sha256:55b0b0dbd97462d06ebee91e4dac24ed4d4702be82b24f07e6c1d27e08cea220", size = 795438, upload-time = "2026-07-27T11:33:15.271Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/1c/01bfd571a64e7f270e6bab5e33777debe0edc56759233ce84f27dec92d14/tqdm-4.70.0-py3-none-any.whl", hash = "sha256:7f585706bfddbdebf89daac705b2dfcc16890130727d3197ca62c732b4310953", size = 80184, upload-time = "2026-07-27T11:33:13.167Z" },
+]
+
+[[package]]
+name = "trade-book-charts"
+version = "4.1.0"
+source = { editable = "Core/trade_book_charts" }
+dependencies = [
+    { name = "duckdb" },
+    { name = "matplotlib" },
+    { name = "mplfinance" },
+    { name = "pandas" },
+    { name = "pyyaml" },
+    { name = "rich" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "duckdb", specifier = ">=1.1.0" },
+    { name = "matplotlib", specifier = ">=3.8.0" },
+    { name = "mplfinance", specifier = ">=0.12.10b0" },
+    { name = "pandas", specifier = ">=2.2.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rich", specifier = ">=13.0.0" },
 ]
 
 [[package]]

@@ -197,6 +197,26 @@ def simulate_signals(
                     v = trades_df["signal_time"].iloc[entry_idx]
                     if pd.notna(v):
                         signal_time = v.to_pydatetime() if hasattr(v, "to_pydatetime") else v
+                confirmation_time = None
+                if "confirmation_time" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["confirmation_time"].iloc[entry_idx]
+                    if pd.notna(v):
+                        confirmation_time = v.to_pydatetime() if hasattr(v, "to_pydatetime") else v
+                swing_low_val = None
+                if "swing_low" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["swing_low"].iloc[entry_idx]
+                    if pd.notna(v):
+                        swing_low_val = float(v)
+                upper_pivot_val = r1_val
+                if "upper_pivot" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["upper_pivot"].iloc[entry_idx]
+                    if pd.notna(v):
+                        upper_pivot_val = float(v)
+                lower_pivot_val = s1_val
+                if "lower_pivot" in trades_df.columns and entry_idx < len(trades_df):
+                    v = trades_df["lower_pivot"].iloc[entry_idx]
+                    if pd.notna(v):
+                        lower_pivot_val = float(v)
                 if "fib_bsl" in trades_df.columns:
                     for idx in (exit_idx, entry_idx):
                         if idx < len(trades_df):
@@ -230,10 +250,14 @@ def simulate_signals(
                 "entry_time": entry_time.to_pydatetime() if hasattr(entry_time, "to_pydatetime") else entry_time,
                 "exit_time": exit_time.to_pydatetime() if hasattr(exit_time, "to_pydatetime") else exit_time,
                 "signal_time": signal_time,
+                "confirmation_time": confirmation_time,
                 "entry_price": entry_price,
                 "exit_price": exit_price,
                 "sl_price": sl_price,
                 "tp_price": tp_price,
+                "swing_low": swing_low_val,
+                "upper_pivot": upper_pivot_val,
+                "lower_pivot": lower_pivot_val,
                 "exit_reason": exit_reason,
                 "size": size_val,
                 "entry_fees": fee_cost / 2.0,
@@ -468,6 +492,10 @@ def ensure_db_schema(con: duckdb.DuckDBPyConnection) -> None:
         ('"pivot"', "DOUBLE"),
         ("s1", "DOUBLE"),
         ("r1", "DOUBLE"),
+        ("confirmation_time", "TIMESTAMP WITH TIME ZONE"),
+        ("swing_low", "DOUBLE"),
+        ("upper_pivot", "DOUBLE"),
+        ("lower_pivot", "DOUBLE"),
         ("fib_bsl", "DOUBLE"),
         ("fib_bsl_ambiguous", "BOOLEAN"),
     ]:
@@ -502,6 +530,7 @@ def create_strategy_views(
                 "candle_1",
                 "ecpatt_1", "ecpatt_2", "ecpatt_3",
                 "epcpatt_1", "epcpatt_2", "epcpatt_3",
+                "epatt_1", "epatt_2", "epatt_3", "epatt_4",
             ]:
                 if possible_col in cols:
                     extra_pattern_cols.append(f"p.{possible_col}")
@@ -530,10 +559,14 @@ def create_strategy_views(
             t.entry_time,
             t.exit_time,
             t.signal_time,
+            t.confirmation_time,
             t.entry_price,
             t.exit_price,
             t.sl_price,
             t.tp_price,
+            t.swing_low,
+            COALESCE(t.upper_pivot, t.r1) AS upper_pivot,
+            COALESCE(t.lower_pivot, t.s1) AS lower_pivot,
             t.exit_reason,
             t.size,
             t.entry_fees,
@@ -675,15 +708,23 @@ def populate_strategy_patterns(
                 SELECT
                     timestamp,
                     LAG(cs, 3) OVER (ORDER BY timestamp) || '-' || LAG(cs, 2) OVER (ORDER BY timestamp) || '-' || LAG(cs, 1) OVER (ORDER BY timestamp) AS entry_1,
+                    LAG(cs, 3) OVER (ORDER BY timestamp) || '-' || LAG(cs, 2) OVER (ORDER BY timestamp) || '-' || LAG(cs, 1) OVER (ORDER BY timestamp) AS epatt_1,
                     LAG(cs, 2) OVER (ORDER BY timestamp) || '-' || LAG(cs, 1) OVER (ORDER BY timestamp) || '-' || cs AS entry_2,
+                    LAG(cs, 2) OVER (ORDER BY timestamp) || '-' || LAG(cs, 1) OVER (ORDER BY timestamp) || '-' || cs AS epatt_2,
                     LAG(cs, 1) OVER (ORDER BY timestamp) || '-' || cs || '-' || LEAD(cs, 1) OVER (ORDER BY timestamp) AS entry_3,
+                    LAG(cs, 1) OVER (ORDER BY timestamp) || '-' || cs || '-' || LEAD(cs, 1) OVER (ORDER BY timestamp) AS epatt_3,
                     cs || '-' || LEAD(cs, 1) OVER (ORDER BY timestamp) || '-' || LEAD(cs, 2) OVER (ORDER BY timestamp) || '-' || LEAD(cs, 3) OVER (ORDER BY timestamp) AS entry_4,
+                    cs || '-' || LEAD(cs, 1) OVER (ORDER BY timestamp) || '-' || LEAD(cs, 2) OVER (ORDER BY timestamp) || '-' || LEAD(cs, 3) OVER (ORDER BY timestamp) AS epatt_4,
                     ecpatt_1, ecpatt_2, ecpatt_3, epcpatt_1, epcpatt_2, epcpatt_3
                 FROM candle_states
             )
             SELECT 
                 t.vbt_trade_id,
                 t.fingerprint,
+                p.epatt_1,
+                p.epatt_2,
+                p.epatt_3,
+                p.epatt_4,
                 p.entry_1,
                 p.entry_2,
                 p.entry_3,
@@ -740,18 +781,18 @@ def persist_results(
             con.execute("""
                 INSERT OR REPLACE INTO trades (
                     vbt_trade_id, fingerprint, trade_id, direction, status,
-                    entry_time, exit_time, signal_time, entry_price, exit_price,
-                    sl_price, tp_price, exit_reason,
+                    entry_time, exit_time, signal_time, confirmation_time, entry_price, exit_price,
+                    sl_price, tp_price, swing_low, upper_pivot, lower_pivot, exit_reason,
                     size, entry_fees, exit_fees, pnl, return_pct,
                     risk_amount, r_multiple, projected_rr,
                     "pivot", s1, r1,
                     holding_bars, holding_seconds, is_win,
                     fib_bsl, fib_bsl_ambiguous
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 t["vbt_trade_id"], fp, t.get("trade_id", t["vbt_trade_id"]), t["direction"], t["status"],
-                t["entry_time"], t["exit_time"], t.get("signal_time"), t["entry_price"], t["exit_price"],
-                t.get("sl_price"), t.get("tp_price"), t.get("exit_reason", "Closed"),
+                t["entry_time"], t["exit_time"], t.get("signal_time"), t.get("confirmation_time"), t["entry_price"], t["exit_price"],
+                t.get("sl_price"), t.get("tp_price"), t.get("swing_low"), t.get("upper_pivot"), t.get("lower_pivot"), t.get("exit_reason", "Closed"),
                 t["size"], t["entry_fees"], t["exit_fees"], t["pnl"], t["return_pct"],
                 t.get("risk_amount"), t.get("r_multiple"), t.get("projected_rr"),
                 t.get("pivot"), t.get("s1"), t.get("r1"),

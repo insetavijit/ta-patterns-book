@@ -19,6 +19,7 @@ dependencies = [
     "ta-patterns>=1.1.1",
     "tabulate>=0.10.0",
     "vectorbt>=0.26.2",
+    "trade-book-charts",
 ]
 
 [project.scripts]
@@ -37,3 +38,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["Core"]
+
+[tool.uv.workspace]
+members = ["Core/trade_book_charts"]
+
+[tool.uv.sources]
+trade-book-charts = { workspace = true }
