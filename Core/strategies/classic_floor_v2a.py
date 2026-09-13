@@ -1,7 +1,7 @@
 """Adapter wrapping ClassicFloorModV2A to conform to StrategyProtocol.
 
 ClassicFloorModV2A.generate_signals() returns a 3-tuple (entries, exits, trades_df).
-This adapter delegates to Shared/straragYs/classic_floor_mod_v2A.py and conforms
+This adapter delegates to Shared/Data/strategies/classic_floor_mod_v2A.py and conforms
 to the StrategyProtocol 2-tuple (entries, exits).
 """
 
@@ -13,8 +13,8 @@ from typing import Any
 
 import pandas as pd
 
-# Resolve Shared/straragYs from any working directory
-_STRATEGIES_DIR = Path(__file__).resolve().parents[2] / "Shared" / "straragYs"
+# Resolve Shared/Data/strategies from any working directory
+_STRATEGIES_DIR = Path(__file__).resolve().parents[2] / "Shared" / "Data" / "strategies"
 if str(_STRATEGIES_DIR) not in sys.path:
     sys.path.insert(0, str(_STRATEGIES_DIR))
 

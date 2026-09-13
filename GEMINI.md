@@ -73,7 +73,7 @@
 
 ## Active Strategy & Target Database Focus
 To prevent collateral edits across multiple strategy variants, always concentrate edits and test runs exclusively on the currently active targets configured in [`Shared/cnf.yaml`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/cnf.yaml):
-- **Active Strategy File**: [`Shared/straragYs/classic_floor_mod_v2.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/straragYs/classic_floor_mod_v2.py)
+- **Active Strategy File**: [`Shared/Data/strategies/classic_floor_mod_v2.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/Data/strategies/classic_floor_mod_v2.py)
 - **Active Strategy Name**: `classic_floor_mod_v2`
 - **Active Database**: [`Shared/INPs/Ohlcv_2325Eurusd.duckdb`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/INPs/Ohlcv_2325Eurusd.duckdb)
 - **Active Table**: `ohlcv_eurusd_1m_2025`

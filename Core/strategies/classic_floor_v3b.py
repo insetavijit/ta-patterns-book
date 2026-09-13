@@ -13,8 +13,8 @@ from typing import Any
 
 import pandas as pd
 
-# Resolve Shared/straragYs from any working directory
-_STRATEGIES_DIR = Path(__file__).resolve().parents[2] / "Shared" / "straragYs"
+# Resolve Shared/Data/strategies from any working directory
+_STRATEGIES_DIR = Path(__file__).resolve().parents[2] / "Shared" / "Data" / "strategies"
 if str(_STRATEGIES_DIR) not in sys.path:
     sys.path.insert(0, str(_STRATEGIES_DIR))
 

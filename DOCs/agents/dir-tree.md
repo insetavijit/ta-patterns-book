@@ -29,6 +29,7 @@ ta-patterns-book/
 ├── Notebooks/                    # Marimo / Jupyter exploratory notebooks
 ├── Shared/                       # Shared configuration & data assets
 │   ├── Data/                     # Shared static data fixtures & memory.duckdb
+│   │   └── strategies/           # Concrete trading strategy implementations
 │   ├── INPs/                     # Raw input datasets (CSVs, Parquets, JSONs)
 │   ├── OUTs/                     # Generated output datasets, plots & exported models
 │   │   └── png/                  # Rendered PNG chart canvases & image plots
@@ -61,6 +62,7 @@ When creating or saving files, locate the appropriate directory using the table 
 | **Raw Input Datasets** | `Shared/INPs/` | `btc_1h_2023.csv` |
 | **Generated PNG Charts** | `Shared/OUTs/png/` | `head_and_shoulders_plot.png` |
 | **Static Reference Data & Memory** | `Shared/Data/` | `memory.duckdb` |
+| **Trading Strategy Implementations** | `Shared/Data/strategies/` | `classic_floor_mod_v2.py` |
 | **Jupyter / Marimo Notebooks** | `Notebooks/` | `01_candlestick_exploration.ipynb` |
 | **Unit & Integration Tests** | `Tests/` | `test_head_and_shoulders.py` |
 | **Core Library Code** | `Core/ta_patterns_book/` | `pattern_detector.py` |
