@@ -50,9 +50,13 @@ NEXT STRATEGY VERSION ARCHITECTURE PROPOSAL:
   primary_sl=Aggressive stop loss price level anchored to the Close of the setup signal candle (Bar 0 Close)
   pivot_sl=Structural stop loss price level anchored to the lower_pivot support level (s1)
   safe_sl=Conservative dynamic stop loss set at swing_low minus half (upper_pivot - lower_pivot) range buffer (replaces legacy sl_price)
-- Multi-tier Stop Loss Hit Telemetry (computed True on breach):
-  primary_sl_hit=Boolean flag set to True on candle when price low breaches primary_sl (low <= primary_sl)
-  pivot_sl_hit=Boolean flag set to True on candle when price low breaches pivot_sl (low <= pivot_sl)
-  safe_sl_hit=Boolean flag set to True on candle when price low breaches safe_sl (low <= safe_sl)
+- Multi-tier Trade-Level SL Breach Telemetry:
+  primary_sl_hit=Boolean flag set to True if price touched or breached primary_sl (low <= primary_sl) at any point during trade lifecycle
+  pivot_sl_hit=Boolean flag set to True if price touched or breached pivot_sl (low <= pivot_sl) at any point during trade lifecycle
+  safe_sl_hit=Boolean flag set to True if price touched or breached safe_sl (low <= safe_sl) at any point during trade lifecycle
 - Risk & Capital Allocation Sizing:
   position_size=Computed unit/lot position size based on allocated account risk budget divided by active stop loss distance
+- SL Optimization & Robustness Analytics (Why We Compute These Flags):
+  1. Identifies premature stop-outs: where tighter SL was hit (primary_sl_hit=True) but wider SL survived to hit TP (safe_sl_hit=False, is_win=1).
+  2. Identifies high-efficiency trades: where price never threatened tighter stops (primary_sl_hit=False, is_win=1), proving that a tighter primary_sl could have safely yielded a significantly higher R-multiple.
+  3. Identifies runaway losses: where all stops were breached, indicating patterns where tighter stop execution would have preserved capital.
