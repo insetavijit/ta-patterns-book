@@ -133,3 +133,6 @@ To establish a clean, strategy-agnostic architecture for the next strategy itera
    - `mfe`: Maximum Favorable Excursion during trade lifecycle (identifies near-miss winners for break-even/trailing tuning).
    - `mae`: Maximum Adverse Excursion during trade lifecycle (identifies drawdown threshold required for winning trades).
    - `session`: Market trading session at trade entry (Asian, London, New York, Overlap).
+9. **Execution Control Toggles (`allow_concurrent_trades`)**:
+   - `allow_concurrent_trades` (`bool`, default: `False`): Toggle to permit (`True`) or suppress (`False`) new setup entries while an existing position is already active.
+   - `concurrent_trades_count` (`int`): Bar-level telemetry tracking the number of simultaneous active positions (monitors multi-position margin and portfolio exposure).

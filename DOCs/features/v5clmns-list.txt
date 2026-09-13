@@ -45,6 +45,10 @@ NEXT STRATEGY VERSION ARCHITECTURE PROPOSAL:
   lower_pivot=Generalized lower boundary/support level (replaces hardcoded Floor Trader 's1')
   Standardize 'epatt_1..4' as Canonical (deprecating duplicate 'entry_1..4' aliases)
 
+- Execution Control Toggles:
+  allow_concurrent_trades=(bool: True | False, default: False) Parameter controlling whether new setup signals are allowed to trigger entries while an existing position is already open. If False, new signals are suppressed until all open trades exit. If True, concurrent/overlapping positions are allowed with independent trade_id tracking.
+  concurrent_trades_count=Integer telemetry column tracking the number of simultaneous active trades open on the current bar (monitors margin exposure and multi-position risk).
+
 - Multi-tier Stop Loss Hierarchy:
   primary_sl=Aggressive stop loss price level anchored to the Close of the setup signal candle (Bar 0 Close)
   pivot_sl=Structural stop loss price level anchored to the lower_pivot support level (s1)
