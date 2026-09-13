@@ -17,176 +17,246 @@ except ImportError:
 FIB_RATIOS = (0.236, 0.382, 0.5, 0.618, 0.786)
 
 
+def _detect_session(ts) -> str:
+    """Classify trading session from timestamp (UTC)."""
+    try:
+        hour = pd.to_datetime(ts).hour
+        if 0 <= hour < 7:
+            return "Asian"
+        elif 7 <= hour < 12:
+            return "London"
+        elif 12 <= hour < 16:
+            return "London/NY Overlap"
+        elif 16 <= hour < 21:
+            return "New York"
+        else:
+            return "Asian"
+    except Exception:
+        return "Unknown"
+
+
 class ClassicFloorModV5:
+    """ClassicFloorModV5: Advanced deterministic baseline strategy with multi-tier risk,
+
+    4-phase lifecycle timestamps, holding duration, and excursion telemetry.
+    - Generalized Pivots: upper_pivot (R1 target), lower_pivot (S1 trigger), pivot.
+    - 4-Phase Lifecycle: signal_time (Bar 0), confirmation_time (Bar +3), entry_time (fill), exit_time.
+    - Multi-Tier Stop Loss Hierarchy:
+        * primary_sl: Close of signal candle (Bar 0 Close).
+        * pivot_sl: Structural stop at lower_pivot (S1).
+        * safe_sl: Dynamic swing_low minus half range buffer.
+    - Trade-Level SL Breach Telemetry: primary_sl_hit, pivot_sl_hit, safe_sl_hit.
+    - Duration Telemetry: holding_bars, holding_seconds (duration_candel alias).
+    - Risk & Sizing: risk_primary, risk_pivot, risk_safe, size, lot_size, risk_amount.
+    - Expectancy: projected_rr_primary, projected_rr_safe, r_multiple, pnl, return_pct.
+    - Excursion Extremes: mfe (Maximum Favorable Excursion), mae (Maximum Adverse Excursion).
+    - Market Session: session (Asian, London, New York, London/NY Overlap).
+    - Execution Control: allow_concurrent_trades parameter toggle (True | False).
+    """
+
     name = "classic_floor_mod_v5"
     warmup_candles = 22
 
-    def __init__(self, allow_same_bar_exit: bool = False, filter_zero_volume: bool = True):
+    def __init__(
+        self,
+        allow_same_bar_exit: bool = False,
+        filter_zero_volume: bool = True,
+        allow_concurrent_trades: bool = False,
+        risk_per_trade: float = 100.0,
+    ):
         self.allow_same_bar_exit = allow_same_bar_exit
         self.filter_zero_volume = filter_zero_volume
+        self.allow_concurrent_trades = allow_concurrent_trades
+        self.risk_per_trade = risk_per_trade
 
     def generate_signals(
         self,
         ohlcv: pd.DataFrame,
         params: dict | None = None,
     ) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
-        """
-        ClassicFloorModV5: Clean deterministic baseline strategy.
-        - Core Pivot math: Pivot, S1, R1 (20-period lookback, shifted by 1)
-        - Signal Candle: Bar 0 where close <= S1
-        - Confirmation Candle & Scheduled Entry: Strictly Bar +3 Open (4th candle from signal).
-          No delay filters and no cancellation rules.
-        - Swing Low: min(body_low) across bars 0..3 inclusive (Signal through Confirmation/Entry).
-        - Dynamic Stop Loss: swing_low minus half (R1 - S1) range
-        - Take Profit: frozen R1
-        - 4 Confirmation-Anchored Patterns (epatt_1..4)
-        - 6 Candlestick Patterns (ecpatt_1..3 and epcpatt_1..3)
-        """
         allow_same_bar_exit = (params or {}).get("allow_same_bar_exit", self.allow_same_bar_exit)
         filter_zero_volume = (params or {}).get("filter_zero_volume", self.filter_zero_volume)
+        allow_concurrent_trades = (params or {}).get("allow_concurrent_trades", self.allow_concurrent_trades)
+        risk_per_trade = float((params or {}).get("risk_per_trade", self.risk_per_trade))
+
         if ohlcv.empty:
             empty_series = pd.Series(dtype=bool)
             return empty_series, empty_series, pd.DataFrame()
 
         df = ohlcv.copy().reset_index(drop=True)
 
-        # 1. CLASSIC FLOOR TRADER PIVOTS via rolling calculations
-        high20 = df['high'].rolling(20).max().shift(1)
-        low20 = df['low'].rolling(20).min().shift(1)
-        prev_close = df['close'].shift(1)
+        # 1. PIVOT MATH via 20-period rolling calculations shifted by 1 bar
+        high20 = df["high"].rolling(20).max().shift(1)
+        low20 = df["low"].rolling(20).min().shift(1)
+        prev_close = df["close"].shift(1)
 
-        pivot = (high20 + low20 + prev_close) / 3
-        s1 = (pivot * 2) - high20
-        r1 = (pivot * 2) - low20
+        pivot = (high20 + low20 + prev_close) / 3.0
+        lower_pivot = (pivot * 2.0) - high20  # S1
+        upper_pivot = (pivot * 2.0) - low20   # R1
 
-        df['pivot'] = pivot
-        df['s1'] = s1
-        df['r1'] = r1
-        df['body_low'] = np.minimum(df['open'], df['close'])
+        df["pivot"] = pivot
+        df["lower_pivot"] = lower_pivot
+        df["upper_pivot"] = upper_pivot
+        df["s1"] = lower_pivot
+        df["r1"] = upper_pivot
+        df["body_low"] = np.minimum(df["open"], df["close"])
 
-        # 2. CANDLE STATE & 3-CANDLE PATTERN CLASSIFICATION INDICATORS
-        prev_close_bar = df['close'].shift(1)
-        prev_close_bar.iloc[0] = df['open'].iloc[0]
+        # 2. CANDLE STATE & 3-CANDLE PATTERN CLASSIFICATION
+        prev_close_bar = df["close"].shift(1)
+        prev_close_bar.iloc[0] = df["open"].iloc[0]
 
-        is_up = df['close'] >= prev_close_bar
-        is_green = df['close'] > df['open']
+        is_up = df["close"] >= prev_close_bar
+        is_green = df["close"] > df["open"]
         dir_str = np.where(is_up, "U", "D")
         col_str = np.where(is_green, "G", "R")
-        df['candle_state'] = dir_str + col_str
+        df["candle_state"] = dir_str + col_str
 
         # Confirmation-anchored patterns (epatt_1 to epatt_4)
-        cs = df['candle_state']
-        df['epatt_1'] = cs.shift(3) + "-" + cs.shift(2) + "-" + cs.shift(1)
-        df['epatt_2'] = cs.shift(2) + "-" + cs.shift(1) + "-" + cs
-        df['epatt_3'] = cs.shift(1) + "-" + cs + "-" + cs.shift(-1)
-        df['epatt_4'] = cs + "-" + cs.shift(-1) + "-" + cs.shift(-2) + "-" + cs.shift(-3)
+        cs = df["candle_state"]
+        df["epatt_1"] = cs.shift(3) + "-" + cs.shift(2) + "-" + cs.shift(1)
+        df["epatt_2"] = cs.shift(2) + "-" + cs.shift(1) + "-" + cs
+        df["epatt_3"] = cs.shift(1) + "-" + cs + "-" + cs.shift(-1)
+        df["epatt_4"] = cs + "-" + cs.shift(-1) + "-" + cs.shift(-2) + "-" + cs.shift(-3)
 
-        # Also maintain entry_1..4 for full backward compatibility with loss_profile tools
-        df['entry_1'] = df['epatt_1']
-        df['entry_2'] = df['epatt_2']
-        df['entry_3'] = df['epatt_3']
-        df['entry_4'] = df['epatt_4']
+        # Retain entry_1..4 aliases for loss_profile backwards compatibility
+        df["entry_1"] = df["epatt_1"]
+        df["entry_2"] = df["epatt_2"]
+        df["entry_3"] = df["epatt_3"]
+        df["entry_4"] = df["epatt_4"]
 
-        # 3. Calculate 6 Candlestick Patterns
+        # 3. TA Candlestick Patterns
         if compute_candlestick_pattern_columns is not None:
             patt_df = compute_candlestick_pattern_columns(df)
         else:
             patt_df = pd.DataFrame(
                 np.nan,
                 index=df.index,
-                columns=['ecpatt_1', 'ecpatt_2', 'ecpatt_3', 'epcpatt_1', 'epcpatt_2', 'epcpatt_3']
+                columns=["ecpatt_1", "ecpatt_2", "ecpatt_3", "epcpatt_1", "epcpatt_2", "epcpatt_3"],
             )
+
+        n = len(df)
+        open_arr = df["open"].values
+        high_arr = df["high"].values
+        low_arr = df["low"].values
+        close_arr = df["close"].values
+        volume_arr = df["volume"].values if "volume" in df.columns else np.ones(n)
+        lower_pivot_arr = df["lower_pivot"].values
+        upper_pivot_arr = df["upper_pivot"].values
+        pivot_arr = df["pivot"].values
+        body_low_arr = df["body_low"].values
 
         entries = pd.Series(False, index=df.index)
         exits = pd.Series(False, index=df.index)
 
-        n = len(df)
-        open_arr = df['open'].values
-        high_arr = df['high'].values
-        low_arr = df['low'].values
-        close_arr = df['close'].values
-        volume_arr = df['volume'].values if 'volume' in df.columns else np.ones(n)
-        s1_arr = df['s1'].values
-        r1_arr = df['r1'].values
-        pivot_arr = df['pivot'].values
-        body_low_arr = df['body_low'].values
-
-        waiting_for_entry = False
-        in_trade = False
-        trade_id_counter = 0
-
-        orig_signal_bar = None
-        current_target_bar = None
-        setup_s1 = None
-        setup_r1 = None
-        setup_pivot = None
-        stop_price = None
-        target_price = None
-        entry_price_val = None
-        signal_time_val = None
-        confirmation_time_val = None
-        swing_low_val = None
-        trade_entry_bar = None
-        fib_levels = None
-        first_touch_bar = None
-
-        # Bar-aligned series arrays (same length n as ohlcv)
+        # Bar-aligned telemetry arrays
         in_trade_series = np.zeros(n, dtype=bool)
         trade_id_series = np.zeros(n, dtype=int)
+        direction_series = np.full(n, None, dtype=object)
+        status_series = np.full(n, None, dtype=object)
+        session_series = np.full(n, None, dtype=object)
+
+        signal_time_series = [None] * n
+        confirmation_time_series = [None] * n
+        entry_time_series = [None] * n
+        exit_time_series = [None] * n
+
         entry_price_series = np.full(n, np.nan)
-        sl_series = np.full(n, np.nan)
-        tp_series = np.full(n, np.nan)
         exit_price_series = np.full(n, np.nan)
-        exit_reason_series = np.full(n, None, dtype=object)
+        tp_price_series = np.full(n, np.nan)
+        sl_price_series = np.full(n, np.nan)
+        swing_low_series = np.full(n, np.nan)
+
+        primary_sl_series = np.full(n, np.nan)
+        pivot_sl_series = np.full(n, np.nan)
+        safe_sl_series = np.full(n, np.nan)
+
+        primary_sl_hit_series = np.zeros(n, dtype=bool)
+        pivot_sl_hit_series = np.zeros(n, dtype=bool)
+        safe_sl_hit_series = np.zeros(n, dtype=bool)
+
+        risk_primary_series = np.full(n, np.nan)
+        risk_pivot_series = np.full(n, np.nan)
+        risk_safe_series = np.full(n, np.nan)
+        size_series = np.full(n, np.nan)
+        lot_size_series = np.full(n, np.nan)
+        risk_amount_series = np.full(n, np.nan)
+        entry_fees_series = np.zeros(n, dtype=float)
+        exit_fees_series = np.zeros(n, dtype=float)
+
+        projected_rr_primary_series = np.full(n, np.nan)
+        projected_rr_safe_series = np.full(n, np.nan)
+        r_multiple_series = np.full(n, np.nan)
         realized_pnl_series = np.full(n, np.nan)
         realized_pnl_pct_series = np.full(n, np.nan)
         is_win_series = np.zeros(n, dtype=int)
-        signal_time_series = [None] * n
-        confirmation_time_series = [None] * n
-        swing_low_series = np.full(n, np.nan)
+        exit_reason_series = np.full(n, None, dtype=object)
+
+        holding_bars_series = np.zeros(n, dtype=int)
+        holding_seconds_series = np.full(n, np.nan)
+
+        mfe_series = np.full(n, np.nan)
+        mae_series = np.full(n, np.nan)
         fib_bsl_series = np.full(n, np.nan)
         fib_bsl_ambig_series = np.zeros(n, dtype=bool)
+        concurrent_trades_count_series = np.zeros(n, dtype=int)
+
+        active_trades: list[dict] = []
+        pending_setups: list[dict] = []
+        trade_id_counter = 0
 
         for i in range(n):
-            current_time = df['timestamp'].iloc[i] if 'timestamp' in df.columns else ohlcv.index[i]
+            current_time = df["timestamp"].iloc[i] if "timestamp" in df.columns else ohlcv.index[i]
             cur_open = open_arr[i]
             cur_high = high_arr[i]
             cur_low = low_arr[i]
+            cur_close = close_arr[i]
+            cur_session = _detect_session(current_time)
 
-            # In-trade position management (exits evaluated first)
-            if in_trade:
-                in_trade_series[i] = True
-                trade_id_series[i] = trade_id_counter
-                entry_price_series[i] = entry_price_val
-                sl_series[i] = stop_price
-                tp_series[i] = target_price
-                signal_time_series[i] = signal_time_val
-                confirmation_time_series[i] = confirmation_time_val
-                swing_low_series[i] = swing_low_val
+            # --- A. In-Trade Management & Exits Evaluation ---
+            closed_trades = []
+            for trade in list(active_trades):
+                t_id = trade["trade_id"]
+                t_entry_bar = trade["entry_bar"]
+                t_entry_price = trade["entry_price"]
+                t_target = trade["tp_price"]
+                t_safe_sl = trade["safe_sl"]
+                t_primary_sl = trade["primary_sl"]
+                t_pivot_sl = trade["pivot_sl"]
 
-                # Track Fibonacci level touches on this candle
-                if fib_levels is not None:
+                # Excursion extremes tracking
+                trade["mfe"] = max(trade["mfe"], cur_high - t_entry_price)
+                trade["mae"] = max(trade["mae"], t_entry_price - cur_low)
+
+                # SL touch breach tracking
+                if cur_low <= t_primary_sl:
+                    trade["primary_sl_hit"] = True
+                if cur_low <= t_pivot_sl:
+                    trade["pivot_sl_hit"] = True
+                if cur_low <= t_safe_sl:
+                    trade["safe_sl_hit"] = True
+
+                # Fibonacci level touches tracking
+                if trade["fib_levels"] is not None:
                     for j in range(5):
-                        eps = max(fib_levels[j] * 1e-7, 1e-9)
-                        if first_touch_bar[j] == -1 and cur_high >= fib_levels[j] - eps:
-                            first_touch_bar[j] = i
+                        eps = max(trade["fib_levels"][j] * 1e-7, 1e-9)
+                        if trade["first_touch_bar"][j] == -1 and cur_high >= trade["fib_levels"][j] - eps:
+                            trade["first_touch_bar"][j] = i
 
-                target_hit = cur_high >= target_price
-                stop_hit = cur_low <= stop_price
+                target_hit = cur_high >= t_target
+                stop_hit = cur_low <= t_safe_sl
 
                 if target_hit or stop_hit:
                     exits.iloc[i] = True
-                    in_trade = False
+                    exit_price = t_target if target_hit else t_safe_sl
+                    pnl = exit_price - t_entry_price
+                    pnl_pct = (pnl / t_entry_price) * 100.0
+                    r_mult = pnl / trade["risk_safe"] if trade["risk_safe"] > 0 else np.nan
+                    h_bars = i - t_entry_bar
 
-                    exit_price = target_price if target_hit else stop_price
-                    pnl = exit_price - entry_price_val
-                    pnl_pct = (pnl / entry_price_val) * 100.0
-
-                    exit_price_series[i] = exit_price
-                    realized_pnl_series[i] = pnl
-                    realized_pnl_pct_series[i] = pnl_pct
-                    is_win_series[i] = 1 if target_hit else -1
-                    exit_reason_series[i] = "TP" if target_hit else "SL"
+                    try:
+                        h_sec = float((pd.to_datetime(current_time) - pd.to_datetime(trade["entry_time"])).total_seconds())
+                    except Exception:
+                        h_sec = float(h_bars * 60)
 
                     # Compute fib_bsl
                     if target_hit:
@@ -194,115 +264,283 @@ class ClassicFloorModV5:
                         f_ambig = False
                     else:
                         sl_bar = i
-                        reached = [FIB_RATIOS[j] for j in range(5) if first_touch_bar is not None and first_touch_bar[j] != -1 and first_touch_bar[j] < sl_bar]
+                        reached = [FIB_RATIOS[j] for j in range(5) if trade["first_touch_bar"][j] != -1 and trade["first_touch_bar"][j] < sl_bar]
                         f_bsl = max(reached) if reached else 0.0
-                        tied = [FIB_RATIOS[j] for j in range(5) if first_touch_bar is not None and first_touch_bar[j] == sl_bar]
+                        tied = [FIB_RATIOS[j] for j in range(5) if trade["first_touch_bar"][j] == sl_bar]
                         f_ambig = bool(tied and max(tied) > f_bsl)
 
+                    # Record on exit bar
+                    exit_price_series[i] = exit_price
+                    exit_time_series[i] = current_time
+                    realized_pnl_series[i] = pnl
+                    realized_pnl_pct_series[i] = pnl_pct
+                    r_multiple_series[i] = r_mult
+                    is_win_series[i] = 1 if target_hit else -1
+                    exit_reason_series[i] = "TP" if target_hit else "SL"
+                    status_series[i] = "CLOSED"
+                    holding_bars_series[i] = h_bars
+                    holding_seconds_series[i] = h_sec
+                    mfe_series[i] = trade["mfe"]
+                    mae_series[i] = trade["mae"]
                     fib_bsl_series[i] = f_bsl
                     fib_bsl_ambig_series[i] = f_ambig
-                    if trade_entry_bar is not None and trade_entry_bar < n:
-                        fib_bsl_series[trade_entry_bar] = f_bsl
-                        fib_bsl_ambig_series[trade_entry_bar] = f_ambig
+                    primary_sl_hit_series[i] = trade["primary_sl_hit"]
+                    pivot_sl_hit_series[i] = trade["pivot_sl_hit"]
+                    safe_sl_hit_series[i] = trade["safe_sl_hit"]
 
-                    orig_signal_bar = None
-                    current_target_bar = None
-                    setup_s1 = None
-                    setup_r1 = None
-                    setup_pivot = None
-                    stop_price = None
-                    target_price = None
-                    entry_price_val = None
-                    trade_entry_bar = None
-                    fib_levels = None
-                    first_touch_bar = None
-                    continue
+                    # Retroactively assign trade-level outcomes back to entry bar
+                    if t_entry_bar < n:
+                        fib_bsl_series[t_entry_bar] = f_bsl
+                        fib_bsl_ambig_series[t_entry_bar] = f_ambig
+                        primary_sl_hit_series[t_entry_bar] = trade["primary_sl_hit"]
+                        pivot_sl_hit_series[t_entry_bar] = trade["pivot_sl_hit"]
+                        safe_sl_hit_series[t_entry_bar] = trade["safe_sl_hit"]
+                        mfe_series[t_entry_bar] = trade["mfe"]
+                        mae_series[t_entry_bar] = trade["mae"]
+                        exit_price_series[t_entry_bar] = exit_price
+                        exit_time_series[t_entry_bar] = current_time
+                        exit_reason_series[t_entry_bar] = "TP" if target_hit else "SL"
+                        realized_pnl_series[t_entry_bar] = pnl
+                        realized_pnl_pct_series[t_entry_bar] = pnl_pct
+                        r_multiple_series[t_entry_bar] = r_mult
+                        is_win_series[t_entry_bar] = 1 if target_hit else -1
+                        holding_bars_series[t_entry_bar] = h_bars
+                        holding_seconds_series[t_entry_bar] = h_sec
 
-            # Signal Condition (Bar 0: close <= s1)
-            is_active_bar = (volume_arr[i] > 0 and high_arr[i] > low_arr[i]) if filter_zero_volume else True
-            signal_condition = (not np.isnan(s1_arr[i])) and (close_arr[i] <= s1_arr[i]) and (not waiting_for_entry) and (not in_trade) and is_active_bar
+                    closed_trades.append(trade)
 
-            if signal_condition:
-                waiting_for_entry = True
-                orig_signal_bar = i
-                signal_time_val = current_time
-                current_target_bar = i + 3  # Confirmation candle is strictly at i + 3 (4th candle)
-                setup_s1 = s1_arr[i]
-                setup_r1 = r1_arr[i]
-                setup_pivot = pivot_arr[i]
+            for ct in closed_trades:
+                active_trades.remove(ct)
 
-            # Confirmation Candle Open Execution (Strictly at current_target_bar)
-            if waiting_for_entry and i == current_target_bar:
-                waiting_for_entry = False
-                in_trade = True
+            # --- B. Execute Pending Setup Confirmations at Bar i (Confirmation Bar Open) ---
+            ready_setups = [s for s in pending_setups if s["target_bar"] == i]
+            for setup in ready_setups:
+                pending_setups.remove(setup)
                 trade_id_counter += 1
-                trade_entry_bar = i
+                entry_bar = i
                 entries.iloc[i] = True
 
-                confirmation_time_val = current_time
+                orig_sig_bar = setup["orig_signal_bar"]
                 entry_price_val = cur_open
+                setup_upper = setup["upper_pivot"]
+                setup_lower = setup["lower_pivot"]
 
-                # Swing Low = lowest body_low from signal bar through confirmation bar (0..3)
-                swing_low_val = float(np.min(body_low_arr[orig_signal_bar:i + 1]))
-                half_range = 0.5 * (setup_r1 - setup_s1)
-                stop_price = swing_low_val - half_range
-                target_price = setup_r1
+                swing_low_val = float(np.min(body_low_arr[orig_sig_bar:i + 1]))
+                half_range = 0.5 * (setup_upper - setup_lower)
+                safe_sl_val = swing_low_val - half_range
+                primary_sl_val = float(close_arr[orig_sig_bar])
+                pivot_sl_val = float(setup_lower)
+
+                risk_safe_val = max(entry_price_val - safe_sl_val, 1e-6)
+                risk_primary_val = max(entry_price_val - primary_sl_val, 1e-6)
+                risk_pivot_val = max(entry_price_val - pivot_sl_val, 1e-6)
+
+                size_val = risk_per_trade / risk_safe_val
+                lot_size_val = size_val / 100000.0
+                risk_amount_val = risk_safe_val * size_val
+
+                proj_rr_safe = (setup_upper - entry_price_val) / risk_safe_val
+                proj_rr_primary = (setup_upper - entry_price_val) / risk_primary_val
+
+                fib_lvls = [entry_price_val + r * (setup_upper - entry_price_val) for r in FIB_RATIOS]
+
+                trade_obj = {
+                    "trade_id": trade_id_counter,
+                    "orig_signal_bar": orig_sig_bar,
+                    "signal_time": setup["signal_time"],
+                    "confirmation_time": current_time,
+                    "entry_bar": entry_bar,
+                    "entry_time": current_time,
+                    "entry_price": entry_price_val,
+                    "tp_price": setup_upper,
+                    "sl_price": safe_sl_val,
+                    "safe_sl": safe_sl_val,
+                    "primary_sl": primary_sl_val,
+                    "pivot_sl": pivot_sl_val,
+                    "swing_low": swing_low_val,
+                    "risk_safe": risk_safe_val,
+                    "risk_primary": risk_primary_val,
+                    "risk_pivot": risk_pivot_val,
+                    "size": size_val,
+                    "lot_size": lot_size_val,
+                    "risk_amount": risk_amount_val,
+                    "projected_rr_safe": proj_rr_safe,
+                    "projected_rr_primary": proj_rr_primary,
+                    "fib_levels": fib_lvls,
+                    "first_touch_bar": [-1] * 5,
+                    "mfe": 0.0,
+                    "mae": 0.0,
+                    "primary_sl_hit": False,
+                    "pivot_sl_hit": False,
+                    "safe_sl_hit": False,
+                }
+                active_trades.append(trade_obj)
 
                 # Record on entry bar
                 trade_id_series[i] = trade_id_counter
+                direction_series[i] = "LONG"
+                status_series[i] = "OPEN"
+                session_series[i] = cur_session
+                signal_time_series[i] = setup["signal_time"]
+                confirmation_time_series[i] = current_time
+                entry_time_series[i] = current_time
                 entry_price_series[i] = entry_price_val
-                sl_series[i] = stop_price
-                tp_series[i] = target_price
-                signal_time_series[i] = signal_time_val
-                confirmation_time_series[i] = confirmation_time_val
+                tp_price_series[i] = setup_upper
+                sl_price_series[i] = safe_sl_val
+                safe_sl_series[i] = safe_sl_val
+                primary_sl_series[i] = primary_sl_val
+                pivot_sl_series[i] = pivot_sl_val
                 swing_low_series[i] = swing_low_val
+                risk_safe_series[i] = risk_safe_val
+                risk_primary_series[i] = risk_primary_val
+                risk_pivot_series[i] = risk_pivot_val
+                size_series[i] = size_val
+                lot_size_series[i] = lot_size_val
+                risk_amount_series[i] = risk_amount_val
+                projected_rr_safe_series[i] = proj_rr_safe
+                projected_rr_primary_series[i] = proj_rr_primary
 
-                # Pre-calculate Fibonacci levels
-                fib_levels = [entry_price_val + r * (target_price - entry_price_val) for r in FIB_RATIOS]
-                first_touch_bar = [-1] * 5
+            # --- C. Detect New Setup Signal at Bar i (Bar 0 where Close <= Lower Pivot) ---
+            is_active_bar = (volume_arr[i] > 0 and high_arr[i] > low_arr[i]) if filter_zero_volume else True
+            has_capacity = allow_concurrent_trades or (len(active_trades) == 0 and len(pending_setups) == 0)
 
-        # Build Clean Strategy Trade Table aligned with ohlcv.index
+            signal_condition = (
+                (not np.isnan(lower_pivot_arr[i]))
+                and (cur_close <= lower_pivot_arr[i])
+                and has_capacity
+                and is_active_bar
+            )
+
+            if signal_condition:
+                pending_setups.append({
+                    "orig_signal_bar": i,
+                    "signal_time": current_time,
+                    "target_bar": i + 3,  # Confirmation strictly at 4th candle (Bar +3 Open)
+                    "upper_pivot": upper_pivot_arr[i],
+                    "lower_pivot": lower_pivot_arr[i],
+                    "pivot": pivot_arr[i],
+                })
+
+            # --- D. Track Active State Across Candles ---
+            num_active = len(active_trades)
+            concurrent_trades_count_series[i] = num_active
+            if num_active > 0:
+                in_trade_series[i] = True
+                lead_trade = active_trades[-1]
+                if trade_id_series[i] == 0:
+                    trade_id_series[i] = lead_trade["trade_id"]
+                    direction_series[i] = "LONG"
+                    status_series[i] = "OPEN"
+                    session_series[i] = cur_session
+                    entry_price_series[i] = lead_trade["entry_price"]
+                    tp_price_series[i] = lead_trade["tp_price"]
+                    sl_price_series[i] = lead_trade["sl_price"]
+                    safe_sl_series[i] = lead_trade["safe_sl"]
+                    primary_sl_series[i] = lead_trade["primary_sl"]
+                    pivot_sl_series[i] = lead_trade["pivot_sl"]
+                    swing_low_series[i] = lead_trade["swing_low"]
+                    signal_time_series[i] = lead_trade["signal_time"]
+                    confirmation_time_series[i] = lead_trade["confirmation_time"]
+                    entry_time_series[i] = lead_trade["entry_time"]
+                    size_series[i] = lead_trade["size"]
+                    lot_size_series[i] = lead_trade["lot_size"]
+                    risk_amount_series[i] = lead_trade["risk_amount"]
+                    risk_safe_series[i] = lead_trade["risk_safe"]
+                    risk_primary_series[i] = lead_trade["risk_primary"]
+                    risk_pivot_series[i] = lead_trade["risk_pivot"]
+                    projected_rr_safe_series[i] = lead_trade["projected_rr_safe"]
+                    projected_rr_primary_series[i] = lead_trade["projected_rr_primary"]
+
+        # 4. BUILD UNIFIED TRADES DATAFRAME
         trades_df = pd.DataFrame(index=ohlcv.index)
-        trades_df['pivot'] = pivot.values
-        trades_df['s1'] = s1.values
-        trades_df['r1'] = r1.values
-        trades_df['upper_pivot'] = r1.values
-        trades_df['lower_pivot'] = s1.values
-        trades_df['entries'] = entries.values
-        trades_df['exits'] = exits.values
-        trades_df['in_trade'] = in_trade_series
-        trades_df['trade_id'] = trade_id_series
-        trades_df['entry_price'] = entry_price_series
-        trades_df['sl_price'] = sl_series
-        trades_df['tp_price'] = tp_series
-        trades_df['exit_price'] = exit_price_series
-        trades_df['exit_reason'] = exit_reason_series
-        trades_df['realized_pnl'] = realized_pnl_series
-        trades_df['realized_pnl_pct'] = realized_pnl_pct_series
-        trades_df['is_win'] = is_win_series
-        trades_df['signal_time'] = signal_time_series
-        trades_df['confirmation_time'] = confirmation_time_series
-        trades_df['swing_low'] = swing_low_series
-        trades_df['fib_bsl'] = fib_bsl_series
-        trades_df['fib_bsl_ambiguous'] = fib_bsl_ambig_series
 
-        # Attach Confirmation-Anchored 3-Candle Patterns (epatt_1..4 and entry_1..4)
-        trades_df['epatt_1'] = df['epatt_1'].values
-        trades_df['epatt_2'] = df['epatt_2'].values
-        trades_df['epatt_3'] = df['epatt_3'].values
-        trades_df['epatt_4'] = df['epatt_4'].values
-        trades_df['entry_1'] = df['entry_1'].values
-        trades_df['entry_2'] = df['entry_2'].values
-        trades_df['entry_3'] = df['entry_3'].values
-        trades_df['entry_4'] = df['entry_4'].values
+        # Pivots & Channels
+        trades_df["pivot"] = pivot.values
+        trades_df["lower_pivot"] = lower_pivot.values
+        trades_df["upper_pivot"] = upper_pivot.values
+        trades_df["s1"] = lower_pivot.values
+        trades_df["r1"] = upper_pivot.values
 
-        # Attach 6 Candlestick Patterns
-        trades_df['ecpatt_1'] = patt_df['ecpatt_1'].values
-        trades_df['ecpatt_2'] = patt_df['ecpatt_2'].values
-        trades_df['ecpatt_3'] = patt_df['ecpatt_3'].values
-        trades_df['epcpatt_1'] = patt_df['epcpatt_1'].values
-        trades_df['epcpatt_2'] = patt_df['epcpatt_2'].values
-        trades_df['epcpatt_3'] = patt_df['epcpatt_3'].values
+        # Execution & Lifecycle
+        trades_df["entries"] = entries.values
+        trades_df["exits"] = exits.values
+        trades_df["in_trade"] = in_trade_series
+        trades_df["trade_id"] = trade_id_series
+        trades_df["direction"] = direction_series
+        trades_df["status"] = status_series
+        trades_df["session"] = session_series
+
+        # 4-Phase Timestamps
+        trades_df["signal_time"] = signal_time_series
+        trades_df["confirmation_time"] = confirmation_time_series
+        trades_df["entry_time"] = entry_time_series
+        trades_df["exit_time"] = exit_time_series
+
+        # Orders & Stop Loss Levels
+        trades_df["entry_price"] = entry_price_series
+        trades_df["tp_price"] = tp_price_series
+        trades_df["sl_price"] = sl_price_series
+        trades_df["exit_price"] = exit_price_series
+        trades_df["swing_low"] = swing_low_series
+        trades_df["primary_sl"] = primary_sl_series
+        trades_df["pivot_sl"] = pivot_sl_series
+        trades_df["safe_sl"] = safe_sl_series
+
+        # SL Breach Telemetry
+        trades_df["primary_sl_hit"] = primary_sl_hit_series
+        trades_df["pivot_sl_hit"] = pivot_sl_hit_series
+        trades_df["safe_sl_hit"] = safe_sl_hit_series
+
+        # Risk, Sizing & Fees
+        trades_df["risk_primary"] = risk_primary_series
+        trades_df["risk_pivot"] = risk_pivot_series
+        trades_df["risk_safe"] = risk_safe_series
+        trades_df["size"] = size_series
+        trades_df["lot_size"] = lot_size_series
+        trades_df["risk_amount"] = risk_amount_series
+        trades_df["entry_fees"] = entry_fees_series
+        trades_df["exit_fees"] = exit_fees_series
+
+        # Outcomes & Expectancy
+        trades_df["projected_rr"] = projected_rr_safe_series
+        trades_df["projected_rr_safe"] = projected_rr_safe_series
+        trades_df["projected_rr_primary"] = projected_rr_primary_series
+        trades_df["r_multiple"] = r_multiple_series
+        trades_df["pnl"] = realized_pnl_series
+        trades_df["realized_pnl"] = realized_pnl_series
+        trades_df["return_pct"] = realized_pnl_pct_series
+        trades_df["realized_pnl_pct"] = realized_pnl_pct_series
+        trades_df["is_win"] = is_win_series
+        trades_df["exit_reason"] = exit_reason_series
+
+        # Holding Duration
+        trades_df["holding_bars"] = holding_bars_series
+        trades_df["holding_seconds"] = holding_seconds_series
+        trades_df["duration_candel"] = holding_bars_series
+
+        # Excursions & Concurrency
+        trades_df["mfe"] = mfe_series
+        trades_df["mae"] = mae_series
+        trades_df["fib_bsl"] = fib_bsl_series
+        trades_df["fib_bsl_ambiguous"] = fib_bsl_ambig_series
+        trades_df["concurrent_trades_count"] = concurrent_trades_count_series
+
+        # Patterns
+        trades_df["epatt_1"] = df["epatt_1"].values
+        trades_df["epatt_2"] = df["epatt_2"].values
+        trades_df["epatt_3"] = df["epatt_3"].values
+        trades_df["epatt_4"] = df["epatt_4"].values
+        trades_df["entry_1"] = df["entry_1"].values
+        trades_df["entry_2"] = df["entry_2"].values
+        trades_df["entry_3"] = df["entry_3"].values
+        trades_df["entry_4"] = df["entry_4"].values
+
+        trades_df["ecpatt_1"] = patt_df["ecpatt_1"].values
+        trades_df["ecpatt_2"] = patt_df["ecpatt_2"].values
+        trades_df["ecpatt_3"] = patt_df["ecpatt_3"].values
+        trades_df["epcpatt_1"] = patt_df["epcpatt_1"].values
+        trades_df["epcpatt_2"] = patt_df["epcpatt_2"].values
+        trades_df["epcpatt_3"] = patt_df["epcpatt_3"].values
 
         entries.index = ohlcv.index
         exits.index = ohlcv.index
