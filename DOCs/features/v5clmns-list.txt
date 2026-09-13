@@ -46,3 +46,13 @@ NEXT STRATEGY VERSION ARCHITECTURE PROPOSAL:
   Symmetric generalized nomenclature for the lower boundary/support setup trigger level across multi-strategy engines.
 - Standardize 'epatt_1..4' as Canonical (Deprecate 'entry_1..4'):
   Unifies all candle sequence classification under explicit execution-pattern ('epatt') nomenclature, removing payload duplication and standardizing database ingestion schemas.
+- Multi-tier Stop Loss Hierarchy:
+  primary_sl=Aggressive stop loss price level anchored to the Close of the setup signal candle (Bar 0 Close)
+  pivot_sl=Structural stop loss price level anchored to the lower_pivot support level (s1)
+  safe_sl=Conservative dynamic stop loss set at swing_low minus half (upper_pivot - lower_pivot) range buffer (replaces legacy sl_price)
+- Multi-tier Stop Loss Hit Telemetry (computed True on breach):
+  primary_sl_hit=Boolean flag set to True on candle when price low breaches primary_sl (low <= primary_sl)
+  pivot_sl_hit=Boolean flag set to True on candle when price low breaches pivot_sl (low <= pivot_sl)
+  safe_sl_hit=Boolean flag set to True on candle when price low breaches safe_sl (low <= safe_sl)
+- Risk & Capital Allocation Sizing:
+  position_size=Computed unit/lot position size based on allocated account risk budget divided by active stop loss distance
