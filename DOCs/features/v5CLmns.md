@@ -121,18 +121,31 @@ To establish a clean, strategy-agnostic architecture for the next strategy itera
    - `safe_sl`: Conservative dynamic stop loss set at $\text{swing\_low} - 0.5 \times (\text{upper\_pivot} - \text{lower\_pivot})$.
 5. **Trade-Level SL Breach Telemetry**:
    - `primary_sl_hit`, `pivot_sl_hit`, `safe_sl_hit`: Boolean flags indicating if price reached or breached each SL level at any time during the trade lifecycle.
-6. **Risk Distances & Expectancy (PRR / R-Multiple)**:
+6. **4-Phase Lifecycle Timestamps**:
+   - `signal_time`: Timestamp of initial trigger bar where condition is detected (Bar 0).
+   - `confirmation_time`: Timestamp of setup confirmation candle (Bar +3).
+   - `entry_time`: Exact timestamp when order is filled and trade entered (separated from confirmation to accommodate delayed/limit orders).
+   - `exit_time`: Exact timestamp when trade is closed (TP, SL, or session end).
+7. **Holding & Duration Metrics**:
+   - `holding_bars`: Total candles elapsed between `entry_time` and `exit_time` (standardizes `holding_bars` / `duration_candel`).
+   - `holding_seconds`: Total wall-clock elapsed time in seconds.
+8. **Risk Distances, Sizing & Fees**:
    - `risk_primary`, `risk_pivot`, `risk_safe`: Absolute price distances from entry to each stop level.
-   - `position_size`: Allocated account risk divided by active risk distance.
+   - `size`: Executed position volume in units/contracts.
+   - `lot_size`: Standardized forex lots (e.g. 0.01 micro, 0.10 mini, 1.00 standard lot).
+   - `risk_amount`: Total monetary capital risked ($\text{risk\_distance} \times \text{size}$).
+   - `entry_fees`, `exit_fees`: Commission and transaction costs on entry/exit.
+9. **Risk:Reward & Realized Expectancy**:
    - `projected_rr_primary`, `projected_rr_safe`: Projected Risk:Reward ratios.
-   - `r_multiple`: Realized gain/loss normalized by active risk distance ($\text{realized\_pnl} / \text{active\_risk}$).
-7. **Lifecycle & Holding Duration**:
-   - `duration_candel`: Number of elapsed candles from entry to exit (required for native `loss-profile --dist duration` aggregation).
-   - `exit_time`: Exact timestamp of trade exit bar.
-8. **Excursion Extremes & Regime**:
-   - `mfe`: Maximum Favorable Excursion during trade lifecycle (identifies near-miss winners for break-even/trailing tuning).
-   - `mae`: Maximum Adverse Excursion during trade lifecycle (identifies drawdown threshold required for winning trades).
-   - `session`: Market trading session at trade entry (Asian, London, New York, Overlap).
-9. **Execution Control Toggles (`allow_concurrent_trades`)**:
-   - `allow_concurrent_trades` (`bool`, default: `False`): Toggle to permit (`True`) or suppress (`False`) new setup entries while an existing position is already active.
-   - `concurrent_trades_count` (`int`): Bar-level telemetry tracking the number of simultaneous active positions (monitors multi-position margin and portfolio exposure).
+   - `r_multiple`: Realized gain/loss normalized by active risk distance ($\text{pnl} / \text{risk\_amount}$).
+   - `pnl`: Total net realized monetary profit/loss.
+   - `return_pct`: Net percentage return on trade.
+10. **Excursion Extremes & Regime**:
+    - `mfe`: Maximum Favorable Excursion during trade lifecycle (identifies near-miss winners for break-even/trailing tuning).
+    - `mae`: Maximum Adverse Excursion during trade lifecycle (identifies drawdown threshold required for winning trades).
+    - `direction`: Trade direction string (`'LONG'` or `'SHORT'`).
+    - `status`: Position lifecycle state (`'CLOSED'` or `'OPEN'`).
+    - `session`: Market trading session at trade entry (Asian, London, New York, Overlap).
+11. **Execution Control Toggles (`allow_concurrent_trades`)**:
+    - `allow_concurrent_trades` (`bool`, default: `False`): Toggle to permit (`True`) or suppress (`False`) new setup entries while an existing position is already active.
+    - `concurrent_trades_count` (`int`): Bar-level telemetry tracking the number of simultaneous active positions (monitors multi-position margin and portfolio exposure).

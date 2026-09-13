@@ -40,18 +40,24 @@ entry_4=Exact duplicate of epatt_4 (alias retained in strategy code for backward
 
 ---
 NEXT STRATEGY VERSION ARCHITECTURE PROPOSAL:
-- Nomenclature Generalization:
-  upper_pivot=Generalized upper channel/target level (replaces hardcoded Floor Trader 'r1')
-  lower_pivot=Generalized lower boundary/support level (replaces hardcoded Floor Trader 's1')
-  Standardize 'epatt_1..4' as Canonical (deprecating duplicate 'entry_1..4' aliases)
+- Generalized Nomenclature:
+  upper_pivot=Generalized upper channel/target level across calculation engines (replaces hardcoded Floor Trader 'r1')
+  lower_pivot=Generalized lower boundary/support level across calculation engines (replaces hardcoded Floor Trader 's1')
+  Standardize 'epatt_1..4' as Canonical (deprecates redundant 'entry_1..4' aliases)
 
-- Execution Control Toggles:
-  allow_concurrent_trades=(bool: True | False, default: False) Parameter controlling whether new setup signals are allowed to trigger entries while an existing position is already open. If False, new signals are suppressed until all open trades exit. If True, concurrent/overlapping positions are allowed with independent trade_id tracking.
-  concurrent_trades_count=Integer telemetry column tracking the number of simultaneous active trades open on the current bar (monitors margin exposure and multi-position risk).
+- 4-Phase Lifecycle Timestamps:
+  signal_time=Timestamp of initial setup trigger candle where condition is first detected (Bar 0)
+  confirmation_time=Timestamp of setup confirmation candle (3rd candle from signal bar)
+  entry_time=Exact timestamp when order is filled and position is entered (can differ from confirmation if delayed/pending)
+  exit_time=Exact timestamp when trade is closed (TP hit, SL hit, or session close)
+
+- Duration & Holding Metrics:
+  holding_bars=Total candle count elapsed between entry_time and exit_time (standardizes holding_bars / duration_candel)
+  holding_seconds=Total wall-clock elapsed time of active trade in seconds (exit_time - entry_time)
 
 - Multi-tier Stop Loss Hierarchy:
   primary_sl=Aggressive stop loss price level anchored to the Close of the setup signal candle (Bar 0 Close)
-  pivot_sl=Structural stop loss price level anchored to the lower_pivot support level (s1)
+  pivot_sl=Structural stop loss price level anchored to lower_pivot support level (s1)
   safe_sl=Conservative dynamic stop loss set at swing_low minus half (upper_pivot - lower_pivot) range buffer (replaces legacy sl_price)
 
 - Multi-tier Trade-Level SL Breach Telemetry:
@@ -59,27 +65,35 @@ NEXT STRATEGY VERSION ARCHITECTURE PROPOSAL:
   pivot_sl_hit=Boolean flag set to True if price touched or breached pivot_sl (low <= pivot_sl) at any point during trade lifecycle
   safe_sl_hit=Boolean flag set to True if price touched or breached safe_sl (low <= safe_sl) at any point during trade lifecycle
 
-- Risk Distances & Capital Allocation:
+- Risk Distances, Sizing & Fees:
   risk_primary=Absolute price risk distance to primary_sl (entry_price - primary_sl)
   risk_pivot=Absolute price risk distance to pivot_sl (entry_price - pivot_sl)
   risk_safe=Absolute price risk distance to safe_sl (entry_price - safe_sl)
-  position_size=Computed unit/lot position size based on allocated account risk budget divided by active risk distance
+  size=Executed position volume in units or contracts
+  lot_size=Standardized forex trading lot volume (e.g. 0.01 micro, 0.10 mini, 1.00 standard lot = size / 100,000 for standard FX contracts)
+  risk_amount=Total monetary capital risked on trade in currency units (risk_distance * size)
+  entry_fees=Broker/exchange commission and spread costs incurred on entry fill
+  exit_fees=Broker/exchange commission and spread costs incurred on exit fill
 
-- Projected Risk:Reward & Expectancy:
+- Risk:Reward & Realized Expectancy:
   projected_rr_primary=Projected R:R ratio using primary_sl ((tp_price - entry_price) / risk_primary)
   projected_rr_safe=Projected R:R ratio using safe_sl ((tp_price - entry_price) / risk_safe)
-  r_multiple=Realized return normalized by active risk distance (realized_pnl / active_risk)
-
-- Lifecycle & Duration Telemetry:
-  duration_candel=Total number of candles from trade entry to exit (required for loss-profile --dist duration)
-  exit_time=Timestamp of trade exit bar
+  r_multiple=Realized return normalized by active risk distance (realized_pnl / active_risk_distance)
+  pnl=Total net realized monetary profit/loss (harmonizes realized_pnl)
+  return_pct=Total net percentage return on trade (harmonizes realized_pnl_pct)
 
 - In-Trade Excursion Extremes (MFE / MAE):
-  mfe=Maximum Favorable Excursion (highest price reached during trade minus entry_price)
-  mae=Maximum Adverse Excursion (entry_price minus lowest price reached during trade)
+  mfe=Maximum Favorable Excursion (highest price reached during trade lifecycle minus entry_price)
+  mae=Maximum Adverse Excursion (entry_price minus lowest price reached during trade lifecycle)
 
-- Temporal & Market Regime:
-  session=Market trading session at entry (Asian, London, New York, London/NY Overlap)
+- Direction, Status & Market Regime:
+  direction=Trade direction string ('LONG' or 'SHORT')
+  status=Position lifecycle state ('CLOSED' or 'OPEN')
+  session=Market trading session at trade entry (Asian, London, New York, London/NY Overlap)
+
+- Execution Controls & Multi-Position Telemetry:
+  allow_concurrent_trades=(bool: True | False, default: False) Parameter controlling whether new setup signals are taken while an existing trade is open. If False, new signals are suppressed until all open trades exit. If True, concurrent/overlapping positions are permitted with independent trade_id tracking.
+  concurrent_trades_count=Integer telemetry column tracking the number of simultaneous active trades open on the current bar (monitors cumulative margin exposure).
 
 - SL Optimization & Robustness Analytics (Why We Compute These Flags):
   1. Identifies premature stop-outs: where tighter SL was hit (primary_sl_hit=True) but wider SL survived to hit TP (safe_sl_hit=False, is_win=1).
