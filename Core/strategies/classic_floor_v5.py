@@ -34,6 +34,7 @@ class ClassicFloorV5Strategy:
     def __init__(self) -> None:
         self._inner = _ClassicFloorModV5()
         self.last_trades_df: pd.DataFrame | None = None
+        self.completed_trades: list[dict] = []
 
     def generate_signals(
         self,
@@ -51,4 +52,5 @@ class ClassicFloorV5Strategy:
         """
         entries, exits, trades_df = self._inner.generate_signals(ohlcv, params=params)
         self.last_trades_df = trades_df
+        self.completed_trades = getattr(self._inner, "completed_trades", [])
         return entries, exits

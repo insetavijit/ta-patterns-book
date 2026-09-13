@@ -68,6 +68,7 @@ class ClassicFloorModV5:
         self.filter_zero_volume = filter_zero_volume
         self.allow_concurrent_trades = allow_concurrent_trades
         self.risk_per_trade = risk_per_trade
+        self.completed_trades: list[dict] = []
 
     def generate_signals(
         self,
@@ -202,6 +203,7 @@ class ClassicFloorModV5:
 
         active_trades: list[dict] = []
         pending_setups: list[dict] = []
+        completed_trades: list[dict] = []
         trade_id_counter = 0
 
         for i in range(n):
@@ -307,6 +309,52 @@ class ClassicFloorModV5:
                         holding_bars_series[t_entry_bar] = h_bars
                         holding_seconds_series[t_entry_bar] = h_sec
 
+                    # Record completed trade record
+                    trade_record = dict(trade)
+                    trade_record["exit_bar"] = i
+                    trade_record["exit_time"] = current_time
+                    trade_record["exit_price"] = exit_price
+                    trade_record["exit_reason"] = "TP" if target_hit else "SL"
+                    trade_record["pnl"] = pnl
+                    trade_record["realized_pnl"] = pnl
+                    trade_record["return_pct"] = pnl_pct
+                    trade_record["realized_pnl_pct"] = pnl_pct
+                    trade_record["r_multiple"] = r_mult
+                    trade_record["is_win"] = 1 if target_hit else -1
+                    trade_record["status"] = "CLOSED"
+                    trade_record["direction"] = "LONG"
+                    trade_record["session"] = cur_session
+                    trade_record["holding_bars"] = h_bars
+                    trade_record["holding_seconds"] = h_sec
+                    trade_record["fib_bsl"] = f_bsl
+                    trade_record["fib_bsl_ambiguous"] = f_ambig
+                    trade_record["entry_fees"] = 0.0
+                    trade_record["exit_fees"] = 0.0
+                    trade_record["allow_concurrent_trades"] = allow_concurrent_trades
+                    trade_record["projected_rr"] = trade["projected_rr_safe"]
+                    trade_record["pivot"] = float(pivot.iloc[t_entry_bar])
+                    trade_record["lower_pivot"] = float(lower_pivot.iloc[t_entry_bar])
+                    trade_record["upper_pivot"] = float(upper_pivot.iloc[t_entry_bar])
+                    trade_record["s1"] = float(lower_pivot.iloc[t_entry_bar])
+                    trade_record["r1"] = float(upper_pivot.iloc[t_entry_bar])
+
+                    # Setup patterns from entry bar
+                    trade_record["epatt_1"] = str(df["epatt_1"].iloc[t_entry_bar]) if "epatt_1" in df.columns else None
+                    trade_record["epatt_2"] = str(df["epatt_2"].iloc[t_entry_bar]) if "epatt_2" in df.columns else None
+                    trade_record["epatt_3"] = str(df["epatt_3"].iloc[t_entry_bar]) if "epatt_3" in df.columns else None
+                    trade_record["epatt_4"] = str(df["epatt_4"].iloc[t_entry_bar]) if "epatt_4" in df.columns else None
+                    trade_record["entry_1"] = str(df["entry_1"].iloc[t_entry_bar]) if "entry_1" in df.columns else None
+                    trade_record["entry_2"] = str(df["entry_2"].iloc[t_entry_bar]) if "entry_2" in df.columns else None
+                    trade_record["entry_3"] = str(df["entry_3"].iloc[t_entry_bar]) if "entry_3" in df.columns else None
+                    trade_record["entry_4"] = str(df["entry_4"].iloc[t_entry_bar]) if "entry_4" in df.columns else None
+                    trade_record["ecpatt_1"] = str(patt_df["ecpatt_1"].iloc[t_entry_bar]) if "ecpatt_1" in patt_df.columns else None
+                    trade_record["ecpatt_2"] = str(patt_df["ecpatt_2"].iloc[t_entry_bar]) if "ecpatt_2" in patt_df.columns else None
+                    trade_record["ecpatt_3"] = str(patt_df["ecpatt_3"].iloc[t_entry_bar]) if "ecpatt_3" in patt_df.columns else None
+                    trade_record["epcpatt_1"] = str(patt_df["epcpatt_1"].iloc[t_entry_bar]) if "epcpatt_1" in patt_df.columns else None
+                    trade_record["epcpatt_2"] = str(patt_df["epcpatt_2"].iloc[t_entry_bar]) if "epcpatt_2" in patt_df.columns else None
+                    trade_record["epcpatt_3"] = str(patt_df["epcpatt_3"].iloc[t_entry_bar]) if "epcpatt_3" in patt_df.columns else None
+
+                    completed_trades.append(trade_record)
                     closed_trades.append(trade)
 
             for ct in closed_trades:
@@ -544,5 +592,7 @@ class ClassicFloorModV5:
 
         entries.index = ohlcv.index
         exits.index = ohlcv.index
+
+        self.completed_trades = completed_trades
 
         return entries, exits, trades_df
