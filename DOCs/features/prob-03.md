@@ -9,7 +9,7 @@
 - Adapter: [`Core/strategies/classic_floor_v3a.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/strategies/classic_floor_v3a.py), [`Core/strategies/registry.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/strategies/registry.py)
 - Backtester: [`Notebooks/1Ybt.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Notebooks/1Ybt.py)
 - Database: [`Shared/INPs/Ohlcv_2325Eurusd.duckdb`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/INPs/Ohlcv_2325Eurusd.duckdb)
-- Schema Standard: [`Core/vbt-spike-lite-4.1/Shared/test-schema.json`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/vbt-spike-lite-4.1/Shared/test-schema.json)
+- Schema Standard: [`Shared/Data/test-schema.json`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/Data/test-schema.json)
 - Visualization: [`Core/trade_book_charts/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/trade_book_charts/)
 
 ---
@@ -32,7 +32,7 @@ When visualizing backtested trades using `trade-book-charts` and profiling strat
 ### 1.3 Schema Non-Compliance
 - The primary database view `classic_floor_mod_v3a_trades` deviates from:
   - The historical baseline database (`Shared/Data/eur_usd_trades_5m.duckdb`), which contains `uid`, `trade_id`, `sl_price`, `tp_price`, `exit_reason`, `pivot`, `s1`, `r1`, and `duration_candel`.
-  - The project contract specification in [`test-schema.json`](file:///home/avijit/workSpace/Core/vbt-spike-lite-4.1/Shared/test-schema.json), which mandates `trade_id`, `exit_reason` (`TP`, `SL`, `SIGNAL`, `TIME`), `risk_amount`, `r_multiple`, MFE, and MAE metrics.
+  - The project contract specification in [`test-schema.json`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/Data/test-schema.json), which mandates `trade_id`, `exit_reason` (`TP`, `SL`, `SIGNAL`, `TIME`), `risk_amount`, `r_multiple`, MFE, and MAE metrics.
 
 ---
 
@@ -143,7 +143,7 @@ flowchart LR
      - `exit_reason` (String: `'TP'`, `'SL'`)
      - `pivot`, `s1`, `r1` (Floats)
      - `signal_time` (Timestamp of original trigger bar)
-  3. Derive computed risk fields matching [`test-schema.json`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/vbt-spike-lite-4.1/Shared/test-schema.json):
+  3. Derive computed risk fields matching [`test-schema.json`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/Data/test-schema.json):
      - `trade_id = vbt_trade_id`
      - `risk_amount = abs(entry_price - sl_price) * size`
      - `r_multiple = pnl / risk_amount`

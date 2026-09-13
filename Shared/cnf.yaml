@@ -70,8 +70,8 @@ paths:
       backtest_db: "Shared/INPs/Ohlcv_2325Eurusd.duckdb"
       purpose: "Shared static data fixtures and reference tables."
     strategies:
-      path: "Shared/Data/strategies"
-      active_strategy_file: "Shared/Data/strategies/classic_floor_mod_v2.py"
+      path: "Shared/strategies"
+      active_strategy_file: "Shared/strategies/classic_floor_mod_v2.py"
       active_strategy_name: "classic_floor_mod_v2"
       active_db_path: "Shared/INPs/Ohlcv_2325Eurusd.duckdb"
       active_table: "ohlcv_eurusd_1m_2025"

@@ -1,0 +1,134 @@
+{
+  "$schema_version": "2.0.0",
+  "description": "Data dictionary for vectorbt backtest trades and run metadata. Not strict JSON Schema (draft-07) — this is a structured documentation format; see 'json_schema_note' below if you need an actual validator-compatible version.",
+  "json_schema_note": "To validate rows programmatically, wrap each table's 'columns' into a real JSON Schema object with 'properties' and a top-level 'required' array (not per-property booleans).",
+
+  "tables": {
+
+    "backtest_run": {
+      "description": "One row per backtest execution / parameter combination. Parent table for trades.",
+      "primary_key": "backtest_run_id",
+      "required": ["backtest_run_id", "strategy_id", "symbol", "created_at"],
+      "columns": {
+        "backtest_run_id":   { "type": "string",  "description": "Unique id for this backtest run" },
+        "strategy_id":       { "type": "string",  "description": "Strategy/signal logic name" },
+        "symbol":            { "type": "string",  "description": "Instrument backtested, e.g. BTCUSDT, NIFTY" },
+        "timeframe":         { "type": "string",  "description": "Bar size, e.g. 1m, 5m, 1h, 1d" },
+
+        "trade_type":        { "type": "string", "enum": ["ENTRY_TRADE", "EXIT_TRADE", "POSITION"], "description": "Which vectorbt trades_type this run's trade_book rows were extracted from. Required context — entry_trades/exit_trades/positions have different Return semantics." },
+
+        "vectorbt_version":  { "type": "string",  "description": "Library version used, for reproducibility (backtest math has changed across vbt versions)" },
+        "data_source":       { "type": "string",  "description": "Vendor/exchange the OHLC data came from, e.g. Binance, yfinance, proprietary feed" },
+        "random_seed":       { "type": ["integer", "null"], "description": "Seed used if strategy involves randomness (e.g. from_random_signals)" },
+
+        "date_range_start":  { "type": "string",  "format": "date-time" },
+        "date_range_end":    { "type": "string",  "format": "date-time" },
+        "initial_cash":      { "type": "number",  "description": "Starting capital" },
+        "currency":          { "type": "string",  "description": "Quote currency/asset for all monetary fields in this run, e.g. USDT, USD, INR" },
+
+        "fee_model":         { "type": "string", "enum": ["FIXED", "PERCENTAGE", "TIERED"], "description": "How fees were configured in the backtest (fixed_fees vs fees vs custom)" },
+        "fees_value":        { "type": "number",  "description": "Fee value matching fee_model — fraction if PERCENTAGE, absolute if FIXED" },
+        "slippage_pct":      { "type": "number",  "description": "Slippage assumption used (fraction)" },
+        "sl_stop_pct":       { "type": ["number", "null"], "description": "Stop-loss parameter if used (fraction)" },
+        "tp_stop_pct":       { "type": ["number", "null"], "description": "Take-profit parameter if used (fraction)" },
+
+        "total_return":      { "type": "number" },
+        "benchmark_return":  { "type": "number",  "description": "Buy-and-hold return over the same period, for reference" },
+        "sharpe_ratio":      { "type": "number" },
+        "sortino_ratio":     { "type": "number" },
+        "max_drawdown":      { "type": "number" },
+        "win_rate":          { "type": "number" },
+        "profit_factor":     { "type": "number" },
+        "total_trades":      { "type": "integer" },
+
+        "created_at":        { "type": "string", "format": "date-time", "description": "When this run was executed/ingested" }
+      }
+    },
+
+    "run_params": {
+      "description": "Normalized parameter grid values for a run. One row per (run, param) pair — avoids storing an untyped/unindexable JSON blob when sweeping arbitrary parameter shapes across strategies.",
+      "composite_key": ["backtest_run_id", "param_name"],
+      "foreign_keys": { "backtest_run_id": "backtest_run.backtest_run_id" },
+      "columns": {
+        "backtest_run_id": { "type": "string" },
+        "param_name":      { "type": "string",  "description": "e.g. fast_ma, slow_ma, rsi_period" },
+        "param_value":     { "type": "string",  "description": "Stored as string; cast at query time. Keeps schema stable across strategies with different param shapes." }
+      },
+      "note": "If your param set per strategy is small and fixed (e.g. always exactly fast_ma/slow_ma), promoting them to real typed columns on backtest_run is simpler and preferred over this table. Use this table only when param shape varies across strategies."
+    },
+
+    "trade_book": {
+      "description": "One row per individual trade record produced by vectorbt, enriched with derived risk/excursion metrics. All rows in a given backtest_run_id share the same trade_type (see backtest_run.trade_type).",
+      "primary_key": "trade_id",
+      "required": ["trade_id", "backtest_run_id", "vbt_trade_id", "entry_time", "exit_time"],
+      "foreign_keys": { "backtest_run_id": "backtest_run.backtest_run_id" },
+      "columns": {
+
+        "trade_id":            { "type": "integer", "description": "Surrogate unique id across the whole table (not vectorbt's own Trade Id, which only resets per run)" },
+        "vbt_trade_id":        { "type": "integer", "description": "vectorbt's native 'Trade Id' within this run", "vbt_source": "Trade Id" },
+        "parent_id":           { "type": "integer", "description": "vectorbt's 'Parent Id' — links entry/exit trade fragments from the same scaled position. Required to reconstruct true position-level PnL on partial fills.", "vbt_source": "Parent Id" },
+        "backtest_run_id":     { "type": "string" },
+
+        "vbt_column":          { "type": "string",  "description": "vectorbt's 'Column' field, flattened to a delimiter-joined string if it was a MultiIndex tuple (e.g. param combo + symbol). Document the delimiter used at ingestion time.", "vbt_source": "Column" },
+
+        "direction":           { "type": "string", "enum": ["Long", "Short"], "description": "Matches vectorbt's native casing exactly — do not re-case at ingestion.", "vbt_source": "Direction" },
+        "status":              { "type": "string", "enum": ["Open", "Closed"], "description": "Matches vectorbt's native casing exactly.", "vbt_source": "Status" },
+
+        "entry_idx":           { "type": "integer", "description": "Raw bar index of entry. Comes from pf.trades.records (raw array), NOT records_readable — not present in the readable dataframe." },
+        "exit_idx":            { "type": ["integer", "null"], "description": "Raw bar index of exit. Same caveat as entry_idx. Null if trade still open." },
+        "entry_time":          { "type": "string", "format": "date-time", "vbt_source": "Entry Timestamp" },
+        "exit_time":           { "type": ["string", "null"], "format": "date-time", "vbt_source": "Exit Timestamp" },
+
+        "entry_price":         { "type": "number", "vbt_source": "Avg Entry Price" },
+        "exit_price":          { "type": ["number", "null"], "vbt_source": "Avg Exit Price" },
+        "size":                { "type": "number", "vbt_source": "Size" },
+
+        "entry_fees":          { "type": "number", "vbt_source": "Entry Fees" },
+        "exit_fees":           { "type": ["number", "null"], "vbt_source": "Exit Fees" },
+
+        "pnl":                 { "type": "number", "vbt_source": "PnL" },
+        "return_pct":          { "type": "number", "vbt_source": "Return", "note": "Semantics differ between entry_trades/exit_trades/positions — see backtest_run.trade_type" },
+
+        "exit_reason":         {
+          "type": ["string", "null"],
+          "enum": ["TP", "SL", "SIGNAL", "TIME", "MANUAL", "END_OF_DATA", null],
+          "description": "Not natively provided by vectorbt (confirmed: records_readable has no exit-type field). Reconstructed by comparing exit_price against configured sl_stop/tp_stop within a tolerance.",
+          "reconstruction_tolerance_pct": "Document the actual tolerance value used by your reconstruction script here at ingestion time."
+        },
+
+        "holding_bars":        { "type": ["integer", "null"], "derivation": "computed_column", "formula": "exit_idx - entry_idx" },
+        "holding_seconds":     { "type": ["integer", "null"], "derivation": "computed_column", "formula": "exit_time - entry_time" },
+
+        "risk_amount":         { "type": ["number", "null"], "derivation": "computed_column", "formula": "abs(entry_price - stop_loss_price) * size", "requires": "sl_stop must have been set for this run" },
+        "r_multiple":          { "type": ["number", "null"], "derivation": "computed_column", "formula": "pnl / risk_amount" },
+
+        "max_favorable_excursion": { "type": ["number", "null"], "derivation": "computed_column", "description": "Best unrealized price move during the trade window, from OHLC high/low slice between entry_idx and exit_idx." },
+        "max_adverse_excursion":   { "type": ["number", "null"], "derivation": "computed_column", "description": "Worst unrealized price move during the same window." },
+        "mfe_r":               { "type": ["number", "null"], "derivation": "computed_column", "formula": "max_favorable_excursion / risk_amount" },
+        "mae_r":               { "type": ["number", "null"], "derivation": "computed_column", "formula": "max_adverse_excursion / risk_amount" },
+
+        "account_value_before": { "type": ["number", "null"], "derivation": "computed_column", "description": "pf.value() joined at entry_idx" },
+        "account_value_after":  { "type": ["number", "null"], "derivation": "computed_column", "description": "pf.value() joined at exit_idx" },
+        "drawdown_at_entry":     { "type": ["number", "null"], "derivation": "computed_column", "description": "pf.drawdown() joined at entry_idx" },
+
+        "is_win":              { "type": ["boolean", "null"], "derivation": "computed_column", "formula": "pnl > 0", "note": "Prefer a SQL GENERATED ALWAYS AS column over storing this independently, to avoid drift if pnl is ever restated." },
+
+        "notes":               { "type": ["string", "null"], "description": "Free-text annotation. Populated only when this table is unioned with a live trade_book (out of scope of this file) — leave null for pure backtest rows." }
+      }
+    }
+  },
+
+  "relationships": [
+    { "from": "trade_book.backtest_run_id", "to": "backtest_run.backtest_run_id", "type": "many_to_one" },
+    { "from": "run_params.backtest_run_id", "to": "backtest_run.backtest_run_id", "type": "many_to_one" },
+    { "from": "trade_book.parent_id", "to": "trade_book.vbt_trade_id", "type": "self_referencing", "scope": "within same backtest_run_id" }
+  ],
+
+  "notes": [
+    "trade_type on backtest_run must be set consistently — entry_trades, exit_trades, and positions have different Return semantics in vectorbt and should never be mixed within one run's trade_book rows.",
+    "vbt_source annotations mark fields that map 1:1 to a vectorbt records_readable column name; fields without vbt_source are either raw-record-only (entry_idx/exit_idx) or fully derived (derivation: computed_column).",
+    "Money fields are documented as 'number' for JSON portability, but should be stored as DECIMAL/NUMERIC (not FLOAT) in any SQL implementation to avoid rounding drift over large trade counts.",
+    "direction/status enums intentionally preserve vectorbt's native casing ('Long'/'Closed') rather than uppercasing, so raw ingestion from records_readable requires no transformation.",
+    "This table is designed to share column names with a live trade journal schema so backtest and live trades can eventually be UNIONed for direct comparison — that union table is not defined here."
+  ]
+}

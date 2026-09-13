@@ -34,6 +34,6 @@ Shared/OUTs/
 
 # Strategy drafts & dumps
 .dump/
-Shared/Data/strategies/.dump/
+Shared/strategies/.dump/
 **/__pycache__/
 *.py[oc]

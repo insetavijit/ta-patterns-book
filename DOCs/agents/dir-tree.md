@@ -10,8 +10,12 @@ This document serves as the authoritative directory structure reference for AI A
 ta-patterns-book/
 ├── __trash/                      # Discard area for temporary drafts / cleanups
 ├── .tmp/                         # Transient scratchpads & build cache
-├── Core/                         # Core domain logic & Python source package
-│   └── ta_patterns_book/         # Main package implementation namespace
+├── Core/                         # Core domain logic & registered packages
+│   ├── post_trade_analysis/      # Post-trade runner & excursion engine
+│   ├── strategies/               # Strategy adapter registry & loaders
+│   ├── ta_patterns_book/         # Pattern detector & loss profiler
+│   ├── trade_book_charts/        # SmartGrid trade playbook renderer
+│   └── vbtspike/                 # VectorBT spike backtest engine
 ├── DOCs/                         # All documentation, artifacts, notes & guides
 │   ├── agents/                   # Agent operational docs & reference guides
 │   │   └── dir-tree.md           # [This File] Directory tree & file routing guide
@@ -28,11 +32,11 @@ ta-patterns-book/
 │       └── GOAL-3/               # Goal 3 research workspace
 ├── Notebooks/                    # Marimo / Jupyter exploratory notebooks
 ├── Shared/                       # Shared configuration & data assets
-│   ├── Data/                     # Shared static data fixtures & memory.duckdb
-│   │   └── strategies/           # Concrete trading strategy implementations
+│   ├── Data/                     # Shared static data fixtures, memory.duckdb & schemas
 │   ├── INPs/                     # Raw input datasets (CSVs, Parquets, JSONs)
 │   ├── OUTs/                     # Generated output datasets, plots & exported models
 │   │   └── png/                  # Rendered PNG chart canvases & image plots
+│   ├── strategies/               # Concrete trading strategy implementations
 │   └── cnf.yaml                  # Project configuration file
 ├── Tests/                        # Unit, integration & regression test suites
 ├── Utils/                        # Registered CLI tools & helper utilities
@@ -62,7 +66,7 @@ When creating or saving files, locate the appropriate directory using the table 
 | **Raw Input Datasets** | `Shared/INPs/` | `btc_1h_2023.csv` |
 | **Generated PNG Charts** | `Shared/OUTs/png/` | `head_and_shoulders_plot.png` |
 | **Static Reference Data & Memory** | `Shared/Data/` | `memory.duckdb` |
-| **Trading Strategy Implementations** | `Shared/Data/strategies/` | `classic_floor_mod_v2.py` |
+| **Trading Strategy Implementations** | `Shared/strategies/` | `classic_floor_mod_v2.py` |
 | **Jupyter / Marimo Notebooks** | `Notebooks/` | `01_candlestick_exploration.ipynb` |
 | **Unit & Integration Tests** | `Tests/` | `test_head_and_shoulders.py` |
 | **Core Library Code** | `Core/ta_patterns_book/` | `pattern_detector.py` |
