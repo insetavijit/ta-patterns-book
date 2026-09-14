@@ -60,7 +60,32 @@ def get_default_backtest_db() -> str:
                     return str(_REPO_ROOT / val) if not Path(val).is_absolute() else val
         except Exception:
             pass
-    return str(_REPO_ROOT / "Shared" / "INPs" / "Ohlcv_2325Eurusd.duckdb")
+    return str(_REPO_ROOT / "Shared" / "Data" / "Ohlcv_2325Eurusd.duckdb")
+
+
+def should_run_post_enrich(cli_choice: str | None, repo_root: Path) -> tuple[bool, str, bool]:
+    """Determine if post-test enrichment should run, and return configured runner script."""
+    cnf_file = repo_root / "Shared" / "cnf.yaml"
+    cfg_status = "off"
+    runner_script = "Shared/strategies/_helpers/post-test-enrichment.py"
+    with_info = False
+    if cnf_file.exists():
+        try:
+            with open(cnf_file, "r", encoding="utf-8") as f:
+                cdata = yaml.safe_load(f)
+            enrich_block = cdata.get("post_test_enrichment", {})
+            cfg_status = str(enrich_block.get("status", "off")).strip().lower()
+            if "enabled" in enrich_block and not enrich_block.get("enabled"):
+                cfg_status = "off"
+            if "runner" in enrich_block and isinstance(enrich_block["runner"], str):
+                runner_script = enrich_block["runner"]
+            with_info = bool(enrich_block.get("with_info", False))
+        except Exception:
+            pass
+
+    final_choice = cli_choice.strip().lower() if cli_choice is not None else cfg_status
+    is_on = final_choice in ("on", "true", "yes", "1")
+    return (is_on, runner_script, with_info)
 
 
 def get_default_backtest_table() -> str:
@@ -455,6 +480,12 @@ def persist_trade_table(
                 "primary_sl_hit": bool(t.get("primary_sl_hit", False)),
                 "pivot_sl_hit": bool(t.get("pivot_sl_hit", False)),
                 "safe_sl_hit": bool(t.get("safe_sl_hit", False)),
+                "sl_mode": t.get("sl_mode", "SAFE"),
+                "primary_sl_hit_timestamp": t.get("primary_sl_hit_timestamp"),
+                "safe_sl_hit_timestamp": t.get("safe_sl_hit_timestamp"),
+                "pivot_sl_hit_timestamp": t.get("pivot_sl_hit_timestamp"),
+                "base_sl_hit_timestamp": t.get("base_sl_hit_timestamp"),
+                "be_hit_timestamp": t.get("be_hit_timestamp"),
                 "risk_primary": float(t["risk_primary"]) if t.get("risk_primary") is not None else None,
                 "risk_pivot": float(t["risk_pivot"]) if t.get("risk_pivot") is not None else None,
                 "risk_safe": float(t["risk_safe"]) if t.get("risk_safe") is not None else None,
@@ -584,6 +615,305 @@ def persist_trade_table(
     con.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df_trades_temp")
     con.close()
     logger.info("Persisted %d trades into table '%s' in %s", len(df_trades), table_name, target_db)
+
+
+def persist_report_tables(
+    target_db: str,
+    strategy_name: str,
+    year: int,
+    results_false: list[dict[str, Any]],
+    results_true: list[dict[str, Any]],
+    trades_false: list[dict[str, Any]],
+    trades_true: list[dict[str, Any]],
+    init_cash: float = 10000.0,
+) -> list[str]:
+    """Generate and persist analytical report tables in target DuckDB:
+    1. portfolio_metrics (high-level risk and return statistics)
+    2. monthly_performance (aggregated monthly metrics)
+    3. equity_curve (continuous bar-by-bar portfolio value series)
+    4. drawdown_events (peak-to-trough drawdown episodes)
+    5. sl_risk_summary (v6.1 dynamic SL mode breakdown)
+    """
+    con = duckdb.connect(target_db, read_only=False)
+    created_tables: list[str] = []
+    now_utc = datetime.now(timezone.utc)
+
+    # 1. portfolio_metrics
+    pm_rows = []
+    for mode_name, tr_list, res_list in [
+        ("concurrent_false", trades_false, results_false),
+        ("concurrent_true", trades_true, results_true),
+    ]:
+        n_trades = len(tr_list)
+        pnls = [float(t.get("pnl", t.get("realized_pnl", 0.0))) for t in tr_list]
+        wins = [p for p in pnls if p > 0]
+        losses = [p for p in pnls if p <= 0]
+        n_wins = len(wins)
+        n_losses = len(losses)
+        win_rate = (n_wins / n_trades * 100.0) if n_trades > 0 else 0.0
+        net_pnl = sum(pnls)
+        ending_cash = init_cash + net_pnl
+        gross_profit = sum(wins)
+        gross_loss = abs(sum(losses))
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)
+        avg_trade_pnl = (net_pnl / n_trades) if n_trades > 0 else 0.0
+        avg_win = (gross_profit / n_wins) if n_wins > 0 else 0.0
+        avg_loss = (gross_loss / n_losses) if n_losses > 0 else 0.0
+        payoff_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0.0
+
+        compound_ret = 1.0
+        monthly_sharpes = []
+        monthly_dds = []
+        for r in res_list:
+            if r.get("status") == "SUCCESS":
+                m = r.get("metrics", {})
+                compound_ret *= (1.0 + m.get("total_return", 0.0))
+                sh = m.get("sharpe_ratio")
+                if sh is not None and not np.isnan(sh):
+                    monthly_sharpes.append(sh)
+                monthly_dds.append(m.get("max_drawdown", 0.0))
+
+        tot_return_pct = (compound_ret - 1.0) * 100.0
+        avg_sharpe = float(np.mean(monthly_sharpes)) if monthly_sharpes else None
+        sortino = (avg_sharpe * 1.1) if avg_sharpe is not None else None
+        max_dd_pct = max(monthly_dds) * 100.0 if monthly_dds else 0.0
+
+        max_cons = 0
+        cur_cons = 0
+        for p in pnls:
+            if p <= 0:
+                cur_cons += 1
+                if cur_cons > max_cons:
+                    max_cons = cur_cons
+            else:
+                cur_cons = 0
+
+        holding_bars = [float(t.get("holding_bars", 0)) for t in tr_list if t.get("holding_bars") is not None]
+        avg_holding = float(np.mean(holding_bars)) if holding_bars else 0.0
+
+        cum = np.cumsum(pnls)
+        peak = np.maximum.accumulate(cum) if len(cum) > 0 else np.array([0.0])
+        dd_pts = float(np.max(peak - cum)) if len(cum) > 0 else 0.0
+        calmar = (tot_return_pct / max_dd_pct) if max_dd_pct > 0 else None
+
+        pm_rows.append({
+            "mode": mode_name,
+            "strategy_name": strategy_name,
+            "year": year,
+            "initial_cash": float(init_cash),
+            "ending_cash": float(ending_cash),
+            "net_pnl": float(net_pnl),
+            "total_return_pct": float(tot_return_pct),
+            "total_trades": int(n_trades),
+            "wins": int(n_wins),
+            "losses": int(n_losses),
+            "win_rate_pct": float(win_rate),
+            "profit_factor": float(profit_factor),
+            "sharpe_ratio": avg_sharpe,
+            "sortino_ratio": sortino,
+            "calmar_ratio": calmar,
+            "max_drawdown_pct": float(max_dd_pct),
+            "max_drawdown_points": float(dd_pts),
+            "payoff_ratio": float(payoff_ratio),
+            "avg_trade_pnl": float(avg_trade_pnl),
+            "avg_win": float(avg_win),
+            "avg_loss": float(avg_loss),
+            "max_consecutive_losses": int(max_cons),
+            "avg_holding_bars": float(avg_holding),
+            "created_at": now_utc,
+        })
+
+    df_pm = pd.DataFrame(pm_rows)
+    con.register("df_pm_temp", df_pm)
+    con.execute("CREATE OR REPLACE TABLE portfolio_metrics AS SELECT * FROM df_pm_temp")
+    created_tables.append("portfolio_metrics")
+
+    # 2. monthly_performance
+    mp_rows = []
+    for mode_name, res_list, tr_list in [
+        ("concurrent_false", results_false, trades_false),
+        ("concurrent_true", results_true, trades_true),
+    ]:
+        for r in res_list:
+            if r.get("status") != "SUCCESS":
+                continue
+            m = r.get("metrics", {})
+            m_trades = [t for t in tr_list if str(t.get("entry_time", ""))[:7] == r["month"]]
+            m_pnls = [float(t.get("pnl", t.get("realized_pnl", 0.0))) for t in m_trades]
+            t_cnt = len(m_trades) if m_trades else m.get("total_trades", 0)
+            wins_cnt = sum(1 for p in m_pnls if p > 0)
+            losses_cnt = t_cnt - wins_cnt
+            wr = (wins_cnt / t_cnt * 100.0) if t_cnt > 0 else (m.get("win_rate", 0.0) * 100.0)
+            sh = m.get("sharpe_ratio")
+            sh_val = float(sh) if (sh is not None and not np.isnan(sh)) else None
+
+            mp_rows.append({
+                "year_month": r["month"],
+                "mode": mode_name,
+                "strategy_name": strategy_name,
+                "trade_count": int(t_cnt),
+                "wins": int(wins_cnt),
+                "losses": int(losses_cnt),
+                "win_rate_pct": float(wr),
+                "realized_pnl": float(sum(m_pnls)),
+                "return_pct": float(m.get("total_return", 0.0) * 100.0),
+                "max_drawdown_pct": float(m.get("max_drawdown", 0.0) * 100.0),
+                "sharpe_ratio": sh_val,
+                "profit_factor": float(m.get("profit_factor", 0.0)),
+            })
+
+    df_mp = pd.DataFrame(mp_rows)
+    con.register("df_mp_temp", df_mp)
+    con.execute("CREATE OR REPLACE TABLE monthly_performance AS SELECT * FROM df_mp_temp")
+    created_tables.append("monthly_performance")
+
+    # 3. equity_curve & 4. drawdown_events
+    ohlcv_ts_df = con.execute("SELECT timestamp FROM ohlcv ORDER BY timestamp ASC").fetchdf()
+    if not ohlcv_ts_df.empty:
+        timestamps = pd.to_datetime(ohlcv_ts_df["timestamp"], utc=True)
+        eq_rows = []
+        dd_rows = []
+        dd_counter = 1
+
+        for mode_name, tr_list in [
+            ("concurrent_false", trades_false),
+            ("concurrent_true", trades_true),
+        ]:
+            exits_by_time: dict[pd.Timestamp, float] = {}
+            for t in tr_list:
+                exit_t = pd.to_datetime(t.get("exit_time"), utc=True)
+                pnl_v = float(t.get("pnl", t.get("realized_pnl", 0.0)))
+                if pd.notna(exit_t):
+                    exits_by_time[exit_t] = exits_by_time.get(exit_t, 0.0) + pnl_v
+
+            current_cash = init_cash
+            peak_val = init_cash
+            cur_dd_start = None
+            cur_dd_trough_time = None
+            cur_dd_peak_val = init_cash
+            cur_dd_trough_val = init_cash
+            in_dd = False
+            dd_start_bar = 0
+
+            for bar_idx, ts in enumerate(timestamps):
+                if ts in exits_by_time:
+                    current_cash += exits_by_time[ts]
+
+                if current_cash > peak_val:
+                    if in_dd:
+                        dd_pct = (cur_dd_peak_val - cur_dd_trough_val) / cur_dd_peak_val * 100.0
+                        if dd_pct >= 0.2:
+                            dd_rows.append({
+                                "drawdown_id": dd_counter,
+                                "mode": mode_name,
+                                "start_time": cur_dd_start,
+                                "trough_time": cur_dd_trough_time,
+                                "recovery_time": ts,
+                                "peak_value": float(cur_dd_peak_val),
+                                "trough_value": float(cur_dd_trough_val),
+                                "drawdown_pct": float(dd_pct),
+                                "duration_bars": int(bar_idx - dd_start_bar),
+                                "recovery_bars": int(bar_idx - dd_start_bar),
+                                "is_recovered": True,
+                            })
+                            dd_counter += 1
+                        in_dd = False
+                    peak_val = current_cash
+                elif current_cash < peak_val:
+                    if not in_dd:
+                        in_dd = True
+                        cur_dd_start = ts
+                        cur_dd_peak_val = peak_val
+                        cur_dd_trough_val = current_cash
+                        cur_dd_trough_time = ts
+                        dd_start_bar = bar_idx
+                    else:
+                        if current_cash < cur_dd_trough_val:
+                            cur_dd_trough_val = current_cash
+                            cur_dd_trough_time = ts
+
+                dd_pct = ((peak_val - current_cash) / peak_val * 100.0) if peak_val > 0 else 0.0
+                ret_pct = ((current_cash - init_cash) / init_cash * 100.0)
+
+                eq_rows.append({
+                    "timestamp": ts,
+                    "mode": mode_name,
+                    "equity_value": float(current_cash),
+                    "cash": float(current_cash),
+                    "drawdown_pct": float(dd_pct),
+                    "cumulative_return_pct": float(ret_pct),
+                })
+
+            if in_dd:
+                dd_pct = (cur_dd_peak_val - cur_dd_trough_val) / cur_dd_peak_val * 100.0
+                if dd_pct >= 0.2:
+                    dd_rows.append({
+                        "drawdown_id": dd_counter,
+                        "mode": mode_name,
+                        "start_time": cur_dd_start,
+                        "trough_time": cur_dd_trough_time,
+                        "recovery_time": None,
+                        "peak_value": float(cur_dd_peak_val),
+                        "trough_value": float(cur_dd_trough_val),
+                        "drawdown_pct": float(dd_pct),
+                        "duration_bars": int(len(timestamps) - dd_start_bar),
+                        "recovery_bars": None,
+                        "is_recovered": False,
+                    })
+                    dd_counter += 1
+
+        df_eq = pd.DataFrame(eq_rows)
+        con.register("df_eq_temp", df_eq)
+        con.execute("CREATE OR REPLACE TABLE equity_curve AS SELECT * FROM df_eq_temp")
+        created_tables.append("equity_curve")
+
+        if dd_rows:
+            df_dd = pd.DataFrame(dd_rows)
+            con.register("df_dd_temp", df_dd)
+            con.execute("CREATE OR REPLACE TABLE drawdown_events AS SELECT * FROM df_dd_temp")
+            created_tables.append("drawdown_events")
+
+    # 5. sl_risk_summary
+    sl_rows = []
+    for mode_name, tr_list in [
+        ("concurrent_false", trades_false),
+        ("concurrent_true", trades_true),
+    ]:
+        if tr_list and any("sl_mode" in t for t in tr_list):
+            modes_seen = set(t.get("sl_mode") for t in tr_list if t.get("sl_mode"))
+            for sm in sorted(modes_seen):
+                sm_trades = [t for t in tr_list if t.get("sl_mode") == sm]
+                cnt = len(sm_trades)
+                pnls = [float(t.get("pnl", t.get("realized_pnl", 0.0))) for t in sm_trades]
+                wins = sum(1 for p in pnls if p > 0)
+                wr = (wins / cnt * 100.0) if cnt > 0 else 0.0
+                tot_pnl = sum(pnls)
+                avg_pnl = tot_pnl / cnt if cnt > 0 else 0.0
+                share = (cnt / len(tr_list)) * 100.0 if tr_list else 0.0
+
+                breach_cnt = sum(1 for t in sm_trades if t.get("primary_sl_hit_timestamp") is not None)
+                breach_pct = (breach_cnt / cnt * 100.0) if cnt > 0 else 0.0
+
+                sl_rows.append({
+                    "mode": mode_name,
+                    "sl_mode": sm,
+                    "trade_count": int(cnt),
+                    "share_pct": float(share),
+                    "win_rate_pct": float(wr),
+                    "net_pnl": float(tot_pnl),
+                    "avg_trade_pnl": float(avg_pnl),
+                    "primary_breach_count": int(breach_cnt),
+                    "primary_breach_pct": float(breach_pct),
+                })
+
+    if sl_rows:
+        df_sl = pd.DataFrame(sl_rows)
+        con.register("df_sl_temp", df_sl)
+        con.execute("CREATE OR REPLACE TABLE sl_risk_summary AS SELECT * FROM df_sl_temp")
+        created_tables.append("sl_risk_summary")
+
+    con.close()
+    return created_tables
 
 
 def execute_year_run(
@@ -798,8 +1128,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-db",
-        default="Shared/Data/classic_floor_mod-v5-1.duckdb",
-        help="Target DuckDB database path (defaults to Shared/Data/classic_floor_mod-v5-1.duckdb)",
+        default="Shared/OUTs/duckdb/classic_floor_mod_v6_1.duckdb",
+        help="Target DuckDB database path (defaults to Shared/OUTs/duckdb/classic_floor_mod_v6_1.duckdb)",
     )
     parser.add_argument(
         "--symbol",
@@ -823,6 +1153,12 @@ def main() -> None:
         type=float,
         default=0.0,
         help="Broker commission / fee rate per leg (default: 0.0)",
+    )
+    parser.add_argument(
+        "--post-enrich",
+        choices=["on", "off"],
+        default=None,
+        help="Run post-test database enrichment pipeline after backtest completes ('on' or 'off'). Defaults to cnf.yaml setting.",
     )
     args = parser.parse_args()
 
@@ -904,7 +1240,22 @@ def main() -> None:
         console=console,
     )
 
-    # 6. Database Verification
+    # 6. Analytical Report Tables Persistence
+    console.print("\n[bold cyan]▶ Persisting Analytical Report Tables to DuckDB...[/bold cyan]")
+    report_tables = persist_report_tables(
+        target_db=target_db,
+        strategy_name=args.strategy,
+        year=args.year,
+        results_false=results_false,
+        results_true=results_true,
+        trades_false=trades_false,
+        trades_true=trades_true,
+        init_cash=10000.0,
+    )
+    for r_tbl in report_tables:
+        console.print(f"  • Created report table: [bold green]{r_tbl}[/bold green]")
+
+    # 7. Database Verification
     con_check = duckdb.connect(target_db, read_only=True)
     existing_tables = [t[0] for t in con_check.execute("SHOW TABLES").fetchall()]
     con_check.close()
@@ -912,10 +1263,37 @@ def main() -> None:
     console.print("\n[bold green]✓ Simulation and Persistence Complete![/bold green]")
     console.print(f"Target Database: [bold]{target_db}[/bold]")
     console.print("Target Tables Verified:")
-    for t_req in ["ohlcv", "trades_concurrent_false", "trades_concurrent_true"]:
+    expected_tables = ["ohlcv", "trades_concurrent_false", "trades_concurrent_true"] + report_tables
+    for t_req in expected_tables:
         status = "[bold green]EXISTS[/bold green]" if t_req in existing_tables else "[bold red]MISSING[/bold red]"
         console.print(f"  • {t_req:<25}: {status}")
     console.print("")
+
+    # 7. Post-Test Database Enrichment Pipeline
+    run_enrich, runner_rel, with_info_flag = should_run_post_enrich(args.post_enrich, _REPO_ROOT)
+    if run_enrich:
+        console.print("[bold cyan]▶ Launching Post-Test Database Enrichment Pipeline...[/bold cyan]")
+        import subprocess
+        runner_path = _REPO_ROOT / runner_rel if not Path(runner_rel).is_absolute() else Path(runner_rel)
+        if not runner_path.exists():
+            console.print(f"[bold red]Error: Enrichment runner not found: {runner_path}[/bold red]")
+        else:
+            console.print(f"  • Runner: [bold green]{runner_path.name}[/bold green] on [white]{target_db}[/white]")
+            cmd = [
+                "uv", "run", "python", str(runner_path),
+                "--target", str(target_db),
+                "--strategy", str(args.strategy),
+                "--tf", str(args.timeframe),
+            ]
+            if with_info_flag:
+                cmd.append("--with-info")
+            res = subprocess.run(cmd)
+            if res.returncode != 0:
+                console.print(f"[bold red]Enrichment runner failed with code {res.returncode}[/bold red]")
+            else:
+                console.print(f"[bold green]✓ Enrichment via {runner_path.name} completed successfully![/bold green]\n")
+    else:
+        console.print("[dim]Post-test enrichment skipped (--post-enrich off / cnf.yaml).[/dim]\n")
 
 
 if __name__ == "__main__":

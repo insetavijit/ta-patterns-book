@@ -62,7 +62,8 @@ paths:
     outputs:
       root: "Shared/OUTs"
       png: "Shared/OUTs/png"
-      purpose: "Generated reports, exported charts, PNG figures, processed metrics, and trained models."
+      duckdb: "Shared/OUTs/duckdb"
+      purpose: "Generated reports, exported charts, PNG figures, DuckDB backtest outputs, processed metrics, and trained models."
     data:
       path: "Shared/Data"
       primary_db: "Shared/Data/Ohlcv_2325Eurusd.duckdb"
@@ -72,8 +73,8 @@ paths:
     strategies:
       path: "Shared/strategies"
       helpers: "Shared/strategies/_helpers"
-      active_strategy_file: "Shared/strategies/classic_floor_mod_v2/classic_floor_mod_v2.py"
-      active_strategy_name: "classic_floor_mod_v2"
+      active_strategy_file: "Shared/strategies/classic_floor_mod_v6/classic_floor_mod_v6_1.py"
+      active_strategy_name: "classic_floor_mod_v6_1"
       active_db_path: "Shared/Data/Ohlcv_2325Eurusd.duckdb"
       active_table: "ohlcv_eurusd_1m_2025"
       purpose: "Dedicated focus strategy file and active database targets to prevent collateral edits. Each version lives in its own subdirectory (classic_floor_mod_v<N>/)."
@@ -103,6 +104,32 @@ tools:
   tools_info:
     path: "Utils/tools-info.md"
     purpose: "Authoritative documentation index for Gemini/Antigravity agents to discover and execute Utils CLI tools."
+  vbtspike:
+    path: "Core/vbtspike"
+    purpose: "VectorBT spike backtest engine, telemetry derivation, and DuckDB persistence."
+  post_test_enrichment:
+    path: "Shared/strategies/_helpers/post-test-enrichment.py"
+    purpose: "Post-backtest DuckDB database enrichment pipeline (candlestick patterns & schema verification)."
+
+# VectorBT Spike Engine Runtime Configuration
+vbtspike:
+  duckdb_path: "Shared/Data/Ohlcv_2325Eurusd.duckdb"
+  results_dir: "Shared/OUTs/duckdb"
+  max_cache_age_default: "24h"
+  log_level: "INFO"
+  backup:
+    dir: "Shared/OUTs/duckdb/backups"
+    keep_last: 5
+
+# Post-Test Database Enrichment Pipeline Configuration
+post_test_enrichment:
+  status: "on"                 # "on" | "off" (master switch to auto-enrich after backtests)
+  enabled: true
+  runner: "Shared/strategies/_helpers/post-test-enrichment.py"
+  scripts:
+    - "Shared/strategies/_helpers/candel_patterns.py"
+  with_info: false             # Set to true to automatically generate column metadata 'info' table
+  force: false                 # Overwrite existing enrichment tables if present
 
 # Terminal & Stdio Display Settings
 display:
@@ -130,6 +157,8 @@ file_routing:
     destination: "paths.shared.inputs"
   - pattern: "*.png, *.jpg, *.svg (rendered charts)"
     destination: "paths.shared.outputs.png"
+  - pattern: "*.duckdb (backtest outputs)"
+    destination: "paths.shared.outputs.duckdb"
   - pattern: "test_*.py"
     destination: "paths.tests"
   - pattern: "*.ipynb"

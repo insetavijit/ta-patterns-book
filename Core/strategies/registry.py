@@ -6,10 +6,21 @@ The CLI and runner use get_strategy() to resolve --strategy flags.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .base import StrategyProtocol
+
+# Dynamically add Shared/strategies and all versioned subdirectories to sys.path
+_STRATEGIES_BASE = Path(__file__).resolve().parents[2] / "Shared" / "strategies"
+if _STRATEGIES_BASE.exists():
+    if str(_STRATEGIES_BASE) not in sys.path:
+        sys.path.insert(0, str(_STRATEGIES_BASE))
+    for _sub in _STRATEGIES_BASE.iterdir():
+        if _sub.is_dir() and str(_sub) not in sys.path:
+            sys.path.insert(0, str(_sub))
 
 from .sma_cross import SmaCrossStrategy
 from .classic_floor_v1 import ClassicFloorV1Strategy
@@ -25,6 +36,7 @@ from .classic_floor_v4a import ClassicFloorV4AStrategy
 from .classic_floor_v4c import ClassicFloorV4CStrategy
 from .classic_floor_v5 import ClassicFloorV5Strategy
 from .classic_floor_v6 import ClassicFloorV6Strategy
+from .classic_floor_v6_1 import ClassicFloorV6_1Strategy
 
 _REGISTRY: dict[str, "StrategyProtocol"] = {
     "sma_cross":             SmaCrossStrategy(),
@@ -41,6 +53,8 @@ _REGISTRY: dict[str, "StrategyProtocol"] = {
     "classic_floor_mod_v4c": ClassicFloorV4CStrategy(),
     "classic_floor_mod_v5":  ClassicFloorV5Strategy(),
     "classic_floor_mod_v6":  ClassicFloorV6Strategy(),
+    "classic_floor_mod_v6_1": ClassicFloorV6_1Strategy(),
+    "classic_floor_mod_v6.1": ClassicFloorV6_1Strategy(),
 }
 
 

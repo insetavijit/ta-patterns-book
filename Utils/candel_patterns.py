@@ -16,7 +16,6 @@ Schema of candel_patters_tf:
     triple_patt_all  VARCHAR (All triple patterns on bar, comma-separated)
     multi_patt_all   VARCHAR (All multi patterns on bar, comma-separated)
     candle_state     VARCHAR (1-candle state: Direction + Color, e.g. 'UG', 'DR')
-    epatt_3          VARCHAR (3-candle state sequence ending at this candle, e.g. 'DR-DR-UG')
     total_patterns   INTEGER (Total pattern detections on this candle)
 
 Usage:
@@ -183,11 +182,10 @@ def _extract_category_patterns(
     return primary, all_pats, counts
 
 
-def compute_candle_states(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
-    """Compute 1-candle Direction+Color and 3-candle state sequences."""
+def compute_candle_states(df: pd.DataFrame) -> pd.Series:
+    """Compute 1-candle Direction+Color states."""
     o = df["open"].to_numpy()
     c = df["close"].to_numpy()
-    n = len(df)
 
     prev_c = np.roll(c, 1)
     prev_c[0] = c[0]
@@ -198,12 +196,7 @@ def compute_candle_states(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     color = np.where(c > o, "G", "R")
     candle_state = [f"{d}{col}" for d, col in zip(direction, color)]
 
-    # 3-Candle State: state[i-2]-state[i-1]-state[i]
-    epatt_3 = np.full(n, None, dtype=object)
-    for i in range(2, n):
-        epatt_3[i] = f"{candle_state[i-2]}-{candle_state[i-1]}-{candle_state[i]}"
-
-    return pd.Series(candle_state, index=df.index), pd.Series(epatt_3, index=df.index)
+    return pd.Series(candle_state, index=df.index)
 
 
 def detect_timeframe(timestamps: pd.Series) -> str:
@@ -282,8 +275,8 @@ def build_candlestick_patterns_table(
     m_mat = all_cdl[MULTI_CANDLE_PATTERNS].to_numpy()
     multi_p, multi_a, multi_cnt = _extract_category_patterns(m_mat, MULTI_CANDLE_PATTERNS, n_rows)
 
-    # Compute candle state and epatt_3
-    state_s, epatt3_s = compute_candle_states(df)
+    # Compute candle state
+    state_s = compute_candle_states(df)
 
     total_cnts = single_cnt + double_cnt + triple_cnt + multi_cnt
 
@@ -298,7 +291,6 @@ def build_candlestick_patterns_table(
         "triple_patt_all": triple_a,
         "multi_patt_all": multi_a,
         "candle_state": state_s.values,
-        "epatt_3": epatt3_s.values,
         "total_patterns": total_cnts,
     })
 
@@ -380,7 +372,6 @@ def generate_patterns_for_db(
     table.add_column("triple_patt", style="magenta", min_width=18)
     table.add_column("multi_patt", style="blue", min_width=16)
     table.add_column("candle_state", style="white", min_width=12)
-    table.add_column("epatt_3", style="dim white", min_width=14)
 
     # Filter sample rows that actually have patterns detected
     sample_df = pat_df[pat_df["total_patterns"] > 0].head(12)
@@ -392,7 +383,6 @@ def generate_patterns_for_db(
             str(row["triple_patt"] or "—"),
             str(row["multi_patt"] or "—"),
             str(row["candle_state"] or "—"),
-            str(row["epatt_3"] or "—"),
         )
 
     console.print(table)

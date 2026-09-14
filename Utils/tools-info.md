@@ -15,6 +15,7 @@ This document serves as the authoritative guide for AI coding agents (Gemini, An
 | **Post-Trade Analysis Package (`post-trade-analysis`, `pfib-engine`)** *(Core)* | [`Core/post_trade_analysis/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/post_trade_analysis/) | `uv run post-trade-analysis --help` | Multi-horizon post-exit Fibonacci runner excursion analyzer (15, 30, 60 candles). | `uv run post-trade-analysis` |
 | **DuckDB Explorer CLI** | [`Utils/duckdb-explorar-tool/duckdb_explorer.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/duckdb-explorar-tool/duckdb_explorer.py) | [`utils.yaml`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/duckdb-explorar-tool/utils.yaml) | Read-only inspection, SQL querying, column profiling, Pandas transformations, & exporting. | `uv run python Utils/duckdb-explorar-tool/duckdb_explorer.py` |
 | **TradeBook Charts Package** *(Core)* | [`Core/trade_book_charts/`](file:///home/avijit/workSpace/Code/ta-patterns-book/Core/trade_book_charts/) | `uv run trade-book-charts describe --pretty` | SmartGrid chart packing, trade playbook PNG generation, & layout engine. | `uv run trade-book-charts` |
+| **Trade Diagnostics & Snapshot Tool** | [`Utils/trades-snapShot.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/trades-snapShot.py) | `uv run python Utils/trades-snapShot.py --help` | Extracts comparative backtest performance, monthly breakdowns, & SL breach stats into `DOCs/NOTEs/{strategy}/trades-snapshot.md`. | `uv run python Utils/trades-snapShot.py` |
 
 ---
 

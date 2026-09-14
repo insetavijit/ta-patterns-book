@@ -35,6 +35,7 @@ ta-patterns-book/
 │   ├── Data/                     # Shared static data fixtures, memory.duckdb & schemas
 │   ├── INPs/                     # Raw input datasets (CSVs, Parquets, JSONs)
 │   ├── OUTs/                     # Generated output datasets, plots & exported models
+│   │   ├── duckdb/               # Generated DuckDB backtest runs & persisted artifacts
 │   │   └── png/                  # Rendered PNG chart canvases & image plots
 │   ├── strategies/               # Concrete trading strategy implementations
 │   └── cnf.yaml                  # Project configuration file
@@ -65,6 +66,7 @@ When creating or saving files, locate the appropriate directory using the table 
 | **Agent Operational Docs** | `DOCs/agents/` | `dir-tree.md` |
 | **Raw Input Datasets** | `Shared/INPs/` | `btc_1h_2023.csv` |
 | **Generated PNG Charts** | `Shared/OUTs/png/` | `head_and_shoulders_plot.png` |
+| **Generated Backtest DuckDBs** | `Shared/OUTs/duckdb/` | `classic_floor_mod_v6_trades.duckdb` |
 | **Static Reference Data & Memory** | `Shared/Data/` | `memory.duckdb` |
 | **Trading Strategy Implementations** | `Shared/strategies/` | `classic_floor_mod_v2.py` |
 | **Jupyter / Marimo Notebooks** | `Notebooks/` | `01_candlestick_exploration.ipynb` |

@@ -230,6 +230,30 @@ COLUMN_DICTIONARY: dict[str, dict[str, str]] = {
         "calcuation": "True if min(Low[entry..exit]) <= safe_sl else False",
         "remars": "Directly coincides with SL exit trigger on losing trades",
     },
+    "primary_sl_hit_timestamp": {
+        "clmn_name": "primary_sl_hit_timestamp",
+        "brif": "Timestamp of the candle when price Low first touched or breached primary_sl while in trade",
+        "calcuation": "First timestamp where Low <= primary_sl during in_trade period",
+        "remars": "Temporal breach marker for premature aggressive stop-out hazard timing",
+    },
+    "pivot_sl_hit_timestamp": {
+        "clmn_name": "pivot_sl_hit_timestamp",
+        "brif": "Timestamp of the candle when price Low first touched or breached pivot_sl while in trade",
+        "calcuation": "First timestamp where Low <= pivot_sl during in_trade period",
+        "remars": "Temporal breach marker for structural lower_pivot support touch",
+    },
+    "safe_sl_hit_timestamp": {
+        "clmn_name": "safe_sl_hit_timestamp",
+        "brif": "Timestamp of the candle when price Low first touched or breached safe_sl while in trade",
+        "calcuation": "First timestamp where Low <= safe_sl during in_trade period",
+        "remars": "Temporal breach marker for conservative dynamic stop loss hit",
+    },
+    "sl_mode": {
+        "clmn_name": "sl_mode",
+        "brif": "Operational stop loss mode adopted at entry confirmation ('SAFE' or 'PIVOT')",
+        "calcuation": "'PIVOT' if projected_rr_safe < 1.0 else 'SAFE'",
+        "remars": "v6.1 dynamic SL adaptation marker indicating whether stop was tightened to pivot_sl",
+    },
 
     # 7. Risk Distances, Sizing & Fees
     "risk_primary": {
@@ -402,6 +426,12 @@ COLUMN_DICTIONARY: dict[str, dict[str, str]] = {
         "calcuation": "True if min(Low) <= safe_sl within 15 bars following trade exit else False",
         "remars": "Evaluates deep adverse excursion following trade exit within 15 bars",
     },
+    "pfib15_sl_hit_timestamp": {
+        "clmn_name": "pfib15_sl_hit_timestamp",
+        "brif": "Timestamp of the candle when post-exit Low first breached safe_sl within 15 bars",
+        "calcuation": "Timestamp of earliest forward candle (Exit + 1..15) where Low <= safe_sl",
+        "remars": "Precise runner stop-out timing within 15 bars post-exit",
+    },
     "pfib30_bsl": {
         "clmn_name": "pfib30_bsl",
         "brif": "Post-trade runner Fibonacci extension reached within 30 bars post-exit",
@@ -420,6 +450,12 @@ COLUMN_DICTIONARY: dict[str, dict[str, str]] = {
         "calcuation": "True if min(Low) <= safe_sl within 30 bars following trade exit else False",
         "remars": "Evaluates deep adverse excursion following trade exit within 30 bars",
     },
+    "pfib30_sl_hit_timestamp": {
+        "clmn_name": "pfib30_sl_hit_timestamp",
+        "brif": "Timestamp of the candle when post-exit Low first breached safe_sl within 30 bars",
+        "calcuation": "Timestamp of earliest forward candle (Exit + 1..30) where Low <= safe_sl",
+        "remars": "Precise runner stop-out timing within 30 bars post-exit",
+    },
     "pfib60_bsl": {
         "clmn_name": "pfib60_bsl",
         "brif": "Post-trade runner Fibonacci extension reached within 60 bars post-exit",
@@ -437,6 +473,12 @@ COLUMN_DICTIONARY: dict[str, dict[str, str]] = {
         "brif": "Post-trade Stop Loss breach flag within 60 bars post-exit",
         "calcuation": "True if min(Low) <= safe_sl within 60 bars following trade exit else False",
         "remars": "Evaluates deep adverse excursion following trade exit within 60 bars",
+    },
+    "pfib60_sl_hit_timestamp": {
+        "clmn_name": "pfib60_sl_hit_timestamp",
+        "brif": "Timestamp of the candle when post-exit Low first breached safe_sl within 60 bars",
+        "calcuation": "Timestamp of earliest forward candle (Exit + 1..60) where Low <= safe_sl",
+        "remars": "Precise runner stop-out timing within 60 bars post-exit",
     },
 
     # 12. Execution Controls & Multi-Trade
@@ -649,6 +691,32 @@ V6_CANONICAL_COLUMNS = [
     "ecpatt_1", "ecpatt_2", "ecpatt_3", "epcpatt_1", "epcpatt_2", "epcpatt_3",
 ]
 
+# V6.1 Canonical Columns Order (76 columns with sl_mode and timestamps)
+V6_1_CANONICAL_COLUMNS = [
+    # Metadata & Timestamps
+    "uid", "trade_id", "vbt_trade_id", "fingerprint", "strategy_name", "symbol", "timeframe", "direction", "status", "session", "sl_mode",
+    "signal_time", "confirmation_time", "entry_time", "exit_time",
+    # Order levels & pivots
+    "entry_price", "exit_price", "tp_price", "swing_low", "pivot", "lower_pivot", "upper_pivot",
+    # SL hierarchy & breach flags / timestamps
+    "primary_sl", "pivot_sl", "safe_sl", "primary_sl_hit", "pivot_sl_hit", "safe_sl_hit",
+    "primary_sl_hit_timestamp", "pivot_sl_hit_timestamp", "safe_sl_hit_timestamp",
+    # Risk & Expectancy
+    "risk_primary", "risk_pivot", "risk_safe", "size", "lot_size", "risk_amount", "entry_fees", "exit_fees",
+    "projected_rr_safe", "projected_rr_primary", "r_multiple", "pnl", "realized_pnl", "return_pct", "realized_pnl_pct", "is_win", "exit_reason",
+    # Duration & In-Trade Excursions
+    "holding_bars", "holding_seconds", "mfe", "mae", "fib_bsl", "fib_bsl_ambiguous",
+    # Post-Trade pfib
+    "pfib15_bsl", "pfib15_be_hit", "pfib15_sl_hit", "pfib15_sl_hit_timestamp",
+    "pfib30_bsl", "pfib30_be_hit", "pfib30_sl_hit", "pfib30_sl_hit_timestamp",
+    "pfib60_bsl", "pfib60_be_hit", "pfib60_sl_hit", "pfib60_sl_hit_timestamp",
+    # Multi-trade execution
+    "allow_concurrent_trades", "concurrent_trades_count",
+    # Patterns
+    "epatt_1", "epatt_2", "epatt_3", "epatt_4",
+    "ecpatt_1", "ecpatt_2", "ecpatt_3", "epcpatt_1", "epcpatt_2", "epcpatt_3",
+]
+
 
 def get_target_db_columns(con: duckdb.DuckDBPyConnection) -> set[str]:
     """Retrieve all column names present in trade tables in target DuckDB."""
@@ -662,7 +730,7 @@ def get_target_db_columns(con: duckdb.DuckDBPyConnection) -> set[str]:
 
 
 def build_info_records(
-    strategy_name: str = "classic_floor_mod_v6",
+    strategy_name: str = "classic_floor_mod_v6_1",
     existing_columns: set[str] | None = None,
 ) -> list[dict[str, str]]:
     """Build structured info records matching the requested schema.
@@ -673,7 +741,10 @@ def build_info_records(
     seen = set()
 
     # Determine priority column ordering based on strategy
-    if "v6" in strategy_name.lower():
+    strat_lower = strategy_name.lower()
+    if "v6_1" in strat_lower or "v6.1" in strat_lower:
+        priority_cols = V6_1_CANONICAL_COLUMNS
+    elif "v6" in strat_lower:
         priority_cols = V6_CANONICAL_COLUMNS
     else:
         # For v5 or generic, start with all known dictionary keys

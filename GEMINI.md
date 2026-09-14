@@ -86,8 +86,8 @@
 
 ## Active Strategy & Target Database Focus
 To prevent collateral edits across multiple strategy variants, always concentrate edits and test runs exclusively on the currently active targets configured in [`Shared/cnf.yaml`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/cnf.yaml):
-- **Active Strategy File**: [`Shared/strategies/classic_floor_mod_v2/classic_floor_mod_v2.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/strategies/classic_floor_mod_v2/classic_floor_mod_v2.py)
-- **Active Strategy Name**: `classic_floor_mod_v2`
-- **Active Database**: [`Shared/Data/Ohlcv_2325Eurusd.duckdb`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/INPs/Ohlcv_2325Eurusd.duckdb)
+- **Active Strategy File**: [`Shared/strategies/classic_floor_mod_v6/classic_floor_mod_v6_1.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/strategies/classic_floor_mod_v6/classic_floor_mod_v6_1.py)
+- **Active Strategy Name**: `classic_floor_mod_v6_1`
+- **Active Database**: [`Shared/Data/Ohlcv_2325Eurusd.duckdb`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/Data/Ohlcv_2325Eurusd.duckdb)
 - **Active Table**: `ohlcv_eurusd_1m_2025`
 Do not modify other strategy files (`v1.py`, `v2A.py`, etc.) unless specifically requested.
