@@ -21,6 +21,7 @@ dependencies = [
     "vectorbt>=0.26.2",
     "trade-book-charts",
     "vbtspike",
+    "huggingface-hub>=1.31.0",
 ]
 
 [project.scripts]
