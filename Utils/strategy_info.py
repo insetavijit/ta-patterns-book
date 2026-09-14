@@ -560,6 +560,68 @@ COLUMN_DICTIONARY: dict[str, dict[str, str]] = {
         "calcuation": "True for all bars while position is open, False otherwise",
         "remars": "Bar-level position state telemetry",
     },
+
+    # 16. Candlestick Patterns Reference (candel_patters_tf)
+    "single_patt": {
+        "clmn_name": "single_patt",
+        "brif": "Primary single candlestick pattern detected on bar using pandas-ta-classic",
+        "calcuation": "Evaluated across 17 1-candle detectors (Hammer, Doji, Marubozu, etc.)",
+        "remars": "Prefix with Bull_ or Bear_ based on direction; NULL if none",
+    },
+    "dubble_patt": {
+        "clmn_name": "dubble_patt",
+        "brif": "Primary 2-candle pattern detected ending on bar using pandas-ta-classic",
+        "calcuation": "Evaluated across 17 2-candle detectors (Engulfing, Harami, Piercing, etc.)",
+        "remars": "Prefix with Bull_ or Bear_ based on direction; NULL if none",
+    },
+    "triple_patt": {
+        "clmn_name": "triple_patt",
+        "brif": "Primary 3-candle pattern detected ending on bar using pandas-ta-classic",
+        "calcuation": "Evaluated across 19 3-candle detectors (Morning/Evening Star, Three White Soldiers, etc.)",
+        "remars": "Prefix with Bull_ or Bear_ based on direction; NULL if none",
+    },
+    "multi_patt": {
+        "clmn_name": "multi_patt",
+        "brif": "Primary 4+ candle pattern detected ending on bar using pandas-ta-classic",
+        "calcuation": "Evaluated across 9 multi-candle detectors (Rising/Falling Three Methods, Breakaway, Hikkake)",
+        "remars": "Prefix with Bull_ or Bear_ based on direction; NULL if none",
+    },
+    "single_patt_all": {
+        "clmn_name": "single_patt_all",
+        "brif": "All single candlestick patterns detected on bar, comma-separated",
+        "calcuation": "Comma-separated union of non-zero 1-candle detectors",
+        "remars": "Contains multi-detection tags on high-volatility bars; NULL if none",
+    },
+    "dubble_patt_all": {
+        "clmn_name": "dubble_patt_all",
+        "brif": "All 2-candle patterns detected ending on bar, comma-separated",
+        "calcuation": "Comma-separated union of non-zero 2-candle detectors",
+        "remars": "Contains multi-detection tags; NULL if none",
+    },
+    "triple_patt_all": {
+        "clmn_name": "triple_patt_all",
+        "brif": "All 3-candle patterns detected ending on bar, comma-separated",
+        "calcuation": "Comma-separated union of non-zero 3-candle detectors",
+        "remars": "Contains multi-detection tags; NULL if none",
+    },
+    "multi_patt_all": {
+        "clmn_name": "multi_patt_all",
+        "brif": "All 4+ candle patterns detected ending on bar, comma-separated",
+        "calcuation": "Comma-separated union of non-zero 4+ candle detectors",
+        "remars": "Contains multi-detection tags; NULL if none",
+    },
+    "candle_state": {
+        "clmn_name": "candle_state",
+        "brif": "Single candle state combination of price Direction and bar Color",
+        "calcuation": "Direction ('U' if Close >= Prev Close else 'D') + Color ('G' if Close > Open else 'R')",
+        "remars": "Values: 'UG', 'UR', 'DG', 'DR'",
+    },
+    "total_patterns": {
+        "clmn_name": "total_patterns",
+        "brif": "Total count of candlestick patterns simultaneously detected on bar",
+        "calcuation": "sum(single_count + double_count + triple_count + multi_count)",
+        "remars": "Indicator of confluence across multiple candlestick patterns",
+    },
 }
 
 # V6 Canonical Columns Order (69 columns)
