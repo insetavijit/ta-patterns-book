@@ -4,3 +4,6 @@
 [submodule "Core/vbtspike"]
 	path = Core/vbtspike
 	url = git@github.com:insetavijit/vbtspike3A.git
+[submodule "Core/mt5-wsl-tstSetup-01"]
+	path = Core/mt5-wsl-tstSetup-01
+	url = git@github.com:insetavijit/mt5-wsl-tstSetup-01.git
