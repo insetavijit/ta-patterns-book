@@ -793,8 +793,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-db",
-        default="Shared/Data/test_v5.duckdb",
-        help="Target DuckDB database path (defaults to Shared/Data/test_v5.duckdb)",
+        default="Shared/Data/classic_floor_mod-v5-1.duckdb",
+        help="Target DuckDB database path (defaults to Shared/Data/classic_floor_mod-v5-1.duckdb)",
     )
     parser.add_argument(
         "--symbol",
