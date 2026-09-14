@@ -61,8 +61,8 @@
 
 ## Database Schemas & Key Conventions
 
-- **Primary Database (Active Work)**: `Shared/INPs/Ohlcv_2325Eurusd.duckdb` (used by `vbtspike`, `1Ybt.py`, and `loss-profile --primary`).
-- **Secondary Database (Historical Baseline)**: `Shared/Data/eur_usd_trades_5m.duckdb` (531 baseline trades with 3-candle patterns, used by `loss-profile --secondary`).
+- **Primary Database (Active Work)**: `Shared/Data/Ohlcv_2325Eurusd.duckdb` (used by `vbtspike`, `1Ybt.py`, and `loss-profile --primary`).
+- **Secondary Database**: `Shared/Data/Ohlcv_2325Eurusd.duckdb` (same as primary; legacy `eur_usd_trades_5m.duckdb` has been removed).
 - **Trades Primary Key**: Join on `trades.uid` = `"3candels_patterns".trade_number` (`BIGINT PRIMARY KEY`, integers `1..531`).
 - **3-Candle Pattern Classifications** (`"3candels_patterns"` table & `"3candels_patterns_view"` view):
   - `entry_1`: 3 setup candles strictly before entry bar (`pos-3`, `pos-2`, `pos-1`).
@@ -88,6 +88,6 @@
 To prevent collateral edits across multiple strategy variants, always concentrate edits and test runs exclusively on the currently active targets configured in [`Shared/cnf.yaml`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/cnf.yaml):
 - **Active Strategy File**: [`Shared/strategies/classic_floor_mod_v2/classic_floor_mod_v2.py`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/strategies/classic_floor_mod_v2/classic_floor_mod_v2.py)
 - **Active Strategy Name**: `classic_floor_mod_v2`
-- **Active Database**: [`Shared/INPs/Ohlcv_2325Eurusd.duckdb`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/INPs/Ohlcv_2325Eurusd.duckdb)
+- **Active Database**: [`Shared/Data/Ohlcv_2325Eurusd.duckdb`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/INPs/Ohlcv_2325Eurusd.duckdb)
 - **Active Table**: `ohlcv_eurusd_1m_2025`
 Do not modify other strategy files (`v1.py`, `v2A.py`, etc.) unless specifically requested.
