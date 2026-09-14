@@ -1,34 +1,50 @@
-# ClassicFloorModV6 — Strategy Column Specification & Architecture Data Dictionary (v6Clmns-list.txt)
+# ClassicFloorModV6 — Strategy Column Specification & Pure Canonical Architecture (v6Clmns-list.txt)
 # Authoritative reference for the next-generation classic_floor_mod_v6 trading strategy.
+# Strictly Canonical: All 8 legacy duplicate aliases (r1, s1, sl_price, projected_rr, entry_1..4) have been removed.
 # Incorporates multi-tier SLs, 4-phase timestamps, in-trade excursions, concurrent trade execution,
 # and integrated strategy-level post-trade Fibonacci runner excursion metrics (pfib15, pfib30, pfib60).
 
 ====================================================================================================
-SECTION 1: SUMMARY OVERVIEW (v6 COLUMN CATEGORIES)
+SECTION 1: SUMMARY OVERVIEW (v6 PURE CANONICAL COLUMNS)
 ====================================================================================================
 
 Category                             Count  Columns Included
 -----------------------------------  -----  --------------------------------------------------------
 1. Trade Identification & Metadata     10   uid, trade_id, vbt_trade_id, fingerprint, strategy_name, symbol, timeframe, direction, status, session
 2. 4-Phase Lifecycle Timestamps         4   signal_time, confirmation_time, entry_time, exit_time
-3. Execution & Order Levels             5   entry_price, exit_price, sl_price, tp_price, swing_low
-4. Pivot & Channel Geometry             5   pivot, lower_pivot, upper_pivot, s1 (alias), r1 (alias)
+3. Execution & Order Levels             4   entry_price, exit_price, tp_price, swing_low
+4. Pivot & Channel Geometry             3   pivot, lower_pivot, upper_pivot
 5. Multi-Tier Stop Loss Hierarchy       3   primary_sl, pivot_sl, safe_sl
 6. Multi-Tier In-Trade SL Breaches      3   primary_sl_hit, pivot_sl_hit, safe_sl_hit
 7. Risk Distances, Sizing & Fees        8   risk_primary, risk_pivot, risk_safe, size, lot_size, risk_amount, entry_fees, exit_fees
-8. Risk:Reward & Realized Expectancy   10   projected_rr, projected_rr_safe, projected_rr_primary, r_multiple, pnl, realized_pnl, return_pct, realized_pnl_pct, is_win, exit_reason
+8. Risk:Reward & Realized Expectancy    8   projected_rr_safe, projected_rr_primary, r_multiple, pnl, realized_pnl, return_pct, realized_pnl_pct, is_win, exit_reason
 9. Duration & Holding Telemetry         2   holding_bars, holding_seconds
 10. In-Trade Excursions (MFE/MAE/BSL)   4   mfe, mae, fib_bsl, fib_bsl_ambiguous
 11. Strategy-Level Post-Trade pfib      9   pfib15_bsl, pfib15_be_hit, pfib15_sl_hit, pfib30_bsl, pfib30_be_hit, pfib30_sl_hit, pfib60_bsl, pfib60_be_hit, pfib60_sl_hit
 12. Execution Controls & Multi-Trade    2   allow_concurrent_trades, concurrent_trades_count
-13. 3-Candle State Patterns             8   epatt_1, epatt_2, epatt_3, epatt_4, entry_1..4 (aliases)
+13. 3-Candle State Patterns             4   epatt_1, epatt_2, epatt_3, epatt_4
 14. TA Candlestick Classifications      6   ecpatt_1, ecpatt_2, ecpatt_3, epcpatt_1, epcpatt_2, epcpatt_3
 -----------------------------------  -----  --------------------------------------------------------
-TOTAL CANONICAL METRICS                73   (67 unique metrics + 6 backwards-compatibility aliases)
+TOTAL PURE CANONICAL METRICS           69   (100% distinct, zero aliases, zero duplicates)
 
 
 ====================================================================================================
-SECTION 2: DETAILED DATA DICTIONARY & FORMULAS (ALPHABETICAL)
+SECTION 2: REMOVED LEGACY ALIASES (PURGED IN V6)
+====================================================================================================
+
+The following 8 legacy duplicate columns are completely purged in v6:
+  • r1           -> Purged (Redundant duplicate of upper_pivot)
+  • s1           -> Purged (Redundant duplicate of lower_pivot)
+  • sl_price     -> Purged (Redundant duplicate of safe_sl)
+  • projected_rr -> Purged (Redundant duplicate of projected_rr_safe)
+  • entry_1      -> Purged (Redundant duplicate of epatt_1)
+  • entry_2      -> Purged (Redundant duplicate of epatt_2)
+  • entry_3      -> Purged (Redundant duplicate of epatt_3)
+  • entry_4      -> Purged (Redundant duplicate of epatt_4)
+
+
+====================================================================================================
+SECTION 3: DETAILED DATA DICTIONARY & FORMULAS (ALPHABETICAL)
 ====================================================================================================
 
 allow_concurrent_trades
@@ -56,11 +72,6 @@ ecpatt_1, ecpatt_2, ecpatt_3
   Data Type   : varchar (string)
   Description : 1st, 2nd, and 3rd detected technical analysis candlestick pattern names on confirmation bar.
   Examples    : 'Hammer', 'Bullish_Engulfing', 'Morning_Star'. Extracted via loss_profile.candles.
-
-entry_1, entry_2, entry_3, entry_4
-  Data Type   : varchar (string)
-  Description : Exact backwards-compatibility aliases for epatt_1, epatt_2, epatt_3, epatt_4.
-  Role        : Retained in database schema for loss-profile CLI compatibility (--dist entry_1).
 
 entry_fees
   Data Type   : double (currency)
@@ -132,7 +143,7 @@ fingerprint
 
 holding_bars
   Data Type   : bigint (integer count)
-  Description : Total number of candles elapsed from entry_time to exit_time (replaces duration_candel).
+  Description : Total number of candles elapsed from entry_time to exit_time.
   Formula     : exit_bar_index - entry_bar_index.
 
 holding_seconds
@@ -164,22 +175,21 @@ mfe (Maximum Favorable Excursion)
   Description : Maximum unrealized profit peak experienced while in position.
   Formula     : max(High_entry..exit) - entry_price. Identifies near-miss winners for trailing/BE stop tuning.
 
-pfib15_be_hit, pfib30_be_hit, pfib60_be_hit   [NEW IN V6]
+pfib15_be_hit, pfib30_be_hit, pfib60_be_hit
   Data Type   : boolean (True | False)
   Description : Multi-horizon post-exit Breakeven breach telemetry.
   Logic       : Evaluated across 15, 30, and 60 forward candles strictly following trade exit.
                 Set to True if price retreated and touched trade entry_price (Breakeven level) within horizon.
                 Enables precise runner retention analysis (determining if runners get stopped at BE).
 
-pfib15_bsl, pfib30_bsl, pfib60_bsl             [NEW IN V6]
+pfib15_bsl, pfib30_bsl, pfib60_bsl
   Data Type   : double (Fibonacci extension ratio: 0.236 to 3.000)
   Description : Multi-horizon post-exit Fibonacci runner excursion reached before hitting SL or BE.
   Grid        : 14-ratio grid: 0.236, 0.382, 0.500, 0.618, 0.786, 1.000, 1.272, 1.414, 1.618, 1.786, 2.000, 2.272, 2.618, 3.000.
   Logic       : Evaluated across 15, 30, and 60 forward candles after trade exit.
                 Measures maximum post-exit continuation excursion before any invalidation occurs.
-                Essential for evaluating trailing runners and multi-stage Take Profit extensions (R2, R3).
 
-pfib15_sl_hit, pfib30_sl_hit, pfib60_sl_hit   [NEW IN V6]
+pfib15_sl_hit, pfib30_sl_hit, pfib60_sl_hit
   Data Type   : boolean (True | False)
   Description : Multi-horizon post-exit Stop Loss breach telemetry.
   Logic       : Set to True if price retreated and breached the trade's safe_sl level within 15, 30, or 60 candles.
@@ -212,10 +222,6 @@ primary_sl_hit
   Description : Cumulative breach flag set to True if Low touched or breached primary_sl at any point while in trade.
   Formula     : Low <= primary_sl.
 
-projected_rr
-  Data Type   : double (ratio)
-  Description : Standardized projected Risk:Reward ratio using safe_sl (alias for projected_rr_safe).
-
 projected_rr_primary
   Data Type   : double (ratio)
   Description : Projected Risk:Reward ratio using aggressive primary SL.
@@ -225,10 +231,6 @@ projected_rr_safe
   Data Type   : double (ratio)
   Description : Projected Risk:Reward ratio using dynamic safe SL.
   Formula     : (tp_price - entry_price) / risk_safe.
-
-r1
-  Data Type   : double (price)
-  Description : Backwards-compatibility alias for upper_pivot.
 
 realized_pnl
   Data Type   : double (price points)
@@ -270,10 +272,6 @@ r_multiple
   Description : Realized trade return normalized by active risk capital.
   Formula     : pnl / risk_amount (e.g. +1.85R on win, -1.00R on full loss).
 
-s1
-  Data Type   : double (price)
-  Description : Backwards-compatibility alias for lower_pivot.
-
 safe_sl
   Data Type   : double (price)
   Description : Conservative dynamic stop loss level incorporating swing low and channel range buffer.
@@ -298,10 +296,6 @@ size
   Description : Dynamic position size in units scaled to equalize monetary risk per trade.
   Formula     : risk_per_trade / risk_safe.
 
-sl_price
-  Data Type   : double (price)
-  Description : Active Stop Loss execution price (equals safe_sl).
-
 status
   Data Type   : varchar ('CLOSED' | 'OPEN')
   Description : Trade lifecycle state. 'CLOSED' for finalized trades, 'OPEN' for active positions.
@@ -325,7 +319,7 @@ timeframe
 
 tp_price
   Data Type   : double (price)
-  Description : Take Profit target price level frozen at upper_pivot (R1) captured from signal bar.
+  Description : Take Profit target price level frozen at upper_pivot captured from signal bar.
 
 trade_id
   Data Type   : bigint (sequential integer)
@@ -337,46 +331,9 @@ uid
 
 upper_pivot
   Data Type   : double (price)
-  Description : Generalized upper channel / resistance boundary (Floor Trader R1).
+  Description : Generalized upper channel / resistance boundary (replaces r1).
   Formula     : (2 * pivot) - Low_20. Serves as the fixed Take Profit target.
 
 vbt_trade_id
   Data Type   : bigint
   Description : VectorBT backtest simulator trade identifier.
-
-
-====================================================================================================
-SECTION 3: STRATEGY-LEVEL POST-TRADE RUNNER EXCURSION ARCHITECTURE (V6 INNOVATION)
-====================================================================================================
-
-Why Include pfib at the Strategy Level?
----------------------------------------
-In older versions (v2..v5), post-trade Fibonacci runner excursions were calculated in a decoupled,
-secondary post-processing CLI ('post-trade-analysis'). This caused three friction points:
-  1. Required a second database connection, extra views ({strat}_trades_pfib), and out-of-band sync.
-  2. Loss profiler ('loss-profile') could not filter or slice by runner potential on fresh backtests.
-  3. Runners could not be evaluated directly inside the backtest engine for partial TP scaling.
-
-In classic_floor_mod_v6, the strategy engine directly forward-evaluates the 15, 30, and 60 candle
-post-exit horizons upon trade closure, baking the 9 essential runner excursion metrics directly into
-the trade output table:
-
-  1. 15-Candle Horizon (Short-term Runner Continuation):
-     - pfib15_bsl    : Highest Fibonacci extension (0.236..3.000) reached before SL or BE.
-     - pfib15_be_hit : True if price retreated back to entry price within 15 bars post-exit.
-     - pfib15_sl_hit : True if price collapsed to safe_sl within 15 bars post-exit.
-
-  2. 30-Candle Horizon (Medium-term Trend Extension):
-     - pfib30_bsl    : Highest Fibonacci extension reached before SL or BE.
-     - pfib30_be_hit : True if price retreated back to entry price within 30 bars post-exit.
-     - pfib30_sl_hit : True if price collapsed to safe_sl within 30 bars post-exit.
-
-  3. 60-Candle Horizon (Macro Runner / Session Continuation):
-     - pfib60_bsl    : Highest Fibonacci extension reached before SL or BE.
-     - pfib60_be_hit : True if price retreated back to entry price within 60 bars post-exit.
-     - pfib60_sl_hit : True if price collapsed to safe_sl within 60 bars post-exit.
-
-Analytical Value of Strategy-Level pfib:
-  - Immediate Runner Viability: Instantly measure what percentage of TP trades continue to 1.272, 1.618, or 2.000.
-  - Breakeven Retention: If pfib15_be_hit is high, moving stop to Breakeven at TP chokes runners prematurely.
-  - Multi-Stage Exit Optimization: Informs dynamic scaling (e.g. exit 70% at upper_pivot, trail 30% to 1.618).
