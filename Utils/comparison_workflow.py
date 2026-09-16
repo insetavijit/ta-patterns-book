@@ -96,6 +96,7 @@ def run_mt5_backtest(
     from_date: str,
     to_date: str,
     console: Console,
+    timeout: int = 180,
 ) -> tuple[dict[str, Any], pd.DataFrame]:
     """Execute MT5 Strategy Tester and retrieve telemetry and OHLCV."""
     console.print(f"\n[bold cyan]▶ Step 1: Running MetaTrader 5 Strategy Tester ({strategy} | {symbol} {period})...[/bold cyan]")
@@ -107,6 +108,7 @@ def run_mt5_backtest(
         "--period", period,
         "--from", from_date,
         "--to", to_date,
+        "--timeout", str(timeout),
     ]
     res = subprocess.run(cmd)
     if res.returncode != 0:
@@ -345,10 +347,6 @@ def persist_combined_database(
         name2="vbt_trades",
         table_name="trades_comparision",
     )
-    # Also create/replace view for trade_by_trade_comparison
-    con2 = duckdb.connect(str(target_db_path))
-    con2.execute("CREATE OR REPLACE VIEW trade_by_trade_comparison AS SELECT * FROM trades_comparision")
-    con2.close()
     created_tables.extend(["trades_comparision", "trade_by_trade_comparison"])
 
     return comp_count, created_tables, matched_pairs, unmatched1, unmatched2, df_mt5_norm, df_vbt_norm
@@ -413,6 +411,7 @@ def main() -> None:
     parser.add_argument("--to-date", "--to", default="2026-09-11", help="End date (YYYY-MM-DD)")
     parser.add_argument("--out-dir", default=str(_DEFAULT_OUT_DIR), help="Output directory for DuckDB")
     parser.add_argument("--db", default=None, help="Explicit target DuckDB path")
+    parser.add_argument("--timeout", type=int, default=300, help="Max wait timeout in seconds for MT5 backtest")
 
     args = parser.parse_args()
     console = Console()
@@ -437,6 +436,7 @@ def main() -> None:
         from_date=args.from_date,
         to_date=args.to_date,
         console=console,
+        timeout=args.timeout,
     )
     mt5_trades = reconstruct_trades(raw_mt5_json)
 
