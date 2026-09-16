@@ -1,9 +1,7 @@
-"""Adapter wrapping ClassicFloorModV6_1 to conform to StrategyProtocol.
+"""Adapter wrapping CFMV0601B and CFMV0601C to conform to StrategyProtocol.
 
-ClassicFloorModV6_1.generate_signals() returns a 3-tuple (entries, exits, trades_df).
-The StrategyProtocol contract requires exactly (entries, exits).
-This adapter strips the third element, delegates everything else, and caches
-trades_df and completed_trades.
+Conforms to StrategyProtocol: generate_signals() returns (entries, exits).
+Caches trades_df and completed_trades on the adapter instance.
 """
 
 from __future__ import annotations
@@ -23,19 +21,21 @@ if str(_V6_DIR) not in sys.path:
     sys.path.insert(0, str(_V6_DIR))
 
 try:
-    from classic_floor_mod_v6_1 import ClassicFloorModV6_1 as _ClassicFloorModV6_1
+    from CFMV0601B import CFMV0601B
+    from CFMV0601C import CFMV0601C
 except ImportError:
-    from Shared.strategies.classic_floor_mod_v6.classic_floor_mod_v6_1 import ClassicFloorModV6_1 as _ClassicFloorModV6_1
+    from Shared.strategies.classic_floor_mod_v6.CFMV0601B import CFMV0601B
+    from Shared.strategies.classic_floor_mod_v6.CFMV0601C import CFMV0601C
 
 
-class ClassicFloorV6_1Strategy:
-    """StrategyProtocol-compatible wrapper for ClassicFloorModV6_1."""
+class CFMV0601BStrategy:
+    """StrategyProtocol-compatible wrapper for CFMV0601B (Blocking)."""
 
-    name: str = "classic_floor_mod_v6_1"
+    name: str = "CFMV0601B"
     version: str = "6.1.0"
 
     def __init__(self) -> None:
-        self._inner = _ClassicFloorModV6_1()
+        self._inner = CFMV0601B()
         self.last_trades_df: pd.DataFrame | None = None
         self.completed_trades: list[dict[str, Any]] = []
 
@@ -44,8 +44,37 @@ class ClassicFloorV6_1Strategy:
         ohlcv: pd.DataFrame,
         params: dict[str, Any] | None = None,
     ) -> tuple[pd.Series, pd.Series]:
-        """Delegate to ClassicFloorModV6_1 and cache trades_df and completed_trades."""
+        """Delegate to CFMV0601B and cache trades_df and completed_trades."""
         entries, exits, trades_df = self._inner.generate_signals(ohlcv, params=params)
         self.last_trades_df = trades_df
         self.completed_trades = getattr(self._inner, "completed_trades", [])
         return entries, exits
+
+
+class CFMV0601CStrategy:
+    """StrategyProtocol-compatible wrapper for CFMV0601C (Concurrent)."""
+
+    name: str = "CFMV0601C"
+    version: str = "6.1.0"
+
+    def __init__(self) -> None:
+        self._inner = CFMV0601C()
+        self.last_trades_df: pd.DataFrame | None = None
+        self.completed_trades: list[dict[str, Any]] = []
+
+    def generate_signals(
+        self,
+        ohlcv: pd.DataFrame,
+        params: dict[str, Any] | None = None,
+    ) -> tuple[pd.Series, pd.Series]:
+        """Delegate to CFMV0601C and cache trades_df and completed_trades."""
+        entries, exits, trades_df = self._inner.generate_signals(ohlcv, params=params)
+        self.last_trades_df = trades_df
+        self.completed_trades = getattr(self._inner, "completed_trades", [])
+        return entries, exits
+
+
+# Backward-compatible aliases for legacy imports
+ClassicFloorV6_1BlockingStrategy = CFMV0601BStrategy
+ClassicFloorV6_1ConcurrentStrategy = CFMV0601CStrategy
+ClassicFloorV6_1Strategy = CFMV0601BStrategy

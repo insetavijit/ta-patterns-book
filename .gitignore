@@ -10,7 +10,9 @@ wheels/
 .venv
 __trash
 .tmp
+tmp
 Shared/INPs
+outs/
 
 # Generated output assets & images
 *.png

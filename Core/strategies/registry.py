@@ -1,7 +1,9 @@
-"""Strategy registry — maps strategy names to instances.
+"""Strategy registry — maps strategy names to active instances.
 
-Add new strategies by importing them and adding to _REGISTRY.
-The CLI and runner use get_strategy() to resolve --strategy flags.
+Contains only active strategies:
+  - CFMV0601B (ClassicFloorMod V06.01 Blocking)
+  - CFMV0601C (ClassicFloorMod V06.01 Concurrent)
+Older strategy versions have been deprecated.
 """
 
 from __future__ import annotations
@@ -22,41 +24,19 @@ if _STRATEGIES_BASE.exists():
         if _sub.is_dir() and str(_sub) not in sys.path:
             sys.path.insert(0, str(_sub))
 
-from .sma_cross import SmaCrossStrategy
-from .classic_floor_v1 import ClassicFloorV1Strategy
-from .classic_floor_v2 import ClassicFloorV2Strategy
-from .classic_floor_v2a import ClassicFloorV2AStrategy
-from .classic_floor_v3 import ClassicFloorV3Strategy
-from .classic_floor_v3a import ClassicFloorV3AStrategy
-from .classic_floor_v3b import ClassicFloorV3BStrategy
-from .classic_floor_v3c import ClassicFloorV3CStrategy
-from .classic_floor_v3e import ClassicFloorV3EStrategy
-from .classic_floor_v4 import ClassicFloorV4Strategy
-from .classic_floor_v4a import ClassicFloorV4AStrategy
-from .classic_floor_v4c import ClassicFloorV4CStrategy
-from .classic_floor_v5 import ClassicFloorV5Strategy
-from .classic_floor_v6 import ClassicFloorV6Strategy
-from .classic_floor_v6_1 import ClassicFloorV6_1Strategy
+from .classic_floor_v6_1 import (
+    CFMV0601BStrategy,
+    CFMV0601CStrategy,
+)
 
 _REGISTRY: dict[str, "StrategyProtocol"] = {
-    "sma_cross":             SmaCrossStrategy(),
-    "classic_floor_mod_v1":  ClassicFloorV1Strategy(),
-    "classic_floor_mod_v2":  ClassicFloorV2Strategy(),
-    "classic_floor_mod_v2a": ClassicFloorV2AStrategy(),
-    "classic_floor_mod_v3":  ClassicFloorV3Strategy(),
-    "classic_floor_mod_v3a": ClassicFloorV3AStrategy(),
-    "classic_floor_mod_v3b": ClassicFloorV3BStrategy(),
-    "classic_floor_mod_v3c": ClassicFloorV3CStrategy(),
-    "classic_floor_mod_v3e": ClassicFloorV3EStrategy(),
-    "classic_floor_mod_v4":  ClassicFloorV4Strategy(),
-    "classic_floor_mod_v4a": ClassicFloorV4AStrategy(),
-    "classic_floor_mod_v4c": ClassicFloorV4CStrategy(),
-    "classic_floor_mod_v5":  ClassicFloorV5Strategy(),
-    "classic_floor_mod_v6":  ClassicFloorV6Strategy(),
-    "classic_floor_mod_v6_1": ClassicFloorV6_1Strategy(),
-    "classic_floor_mod_v6.1": ClassicFloorV6_1Strategy(),
+    "CFMV0601B": CFMV0601BStrategy(),
+    "cfmv0601b": CFMV0601BStrategy(),
+    "CFMV0601C": CFMV0601CStrategy(),
+    "cfmv0601c": CFMV0601CStrategy(),
+    "classic_floor_mod_v6_1": CFMV0601BStrategy(),
+    "CLASSIC_FLOOR_MOD_V6_1": CFMV0601BStrategy(),
 }
-
 
 
 def get_strategy(name: str) -> "StrategyProtocol":
@@ -71,15 +51,14 @@ def get_strategy(name: str) -> "StrategyProtocol":
     Raises:
         KeyError: If the strategy name is not registered.
     """
-    try:
+    if name in _REGISTRY:
         return _REGISTRY[name]
-    except KeyError as exc:
-        available = ", ".join(sorted(_REGISTRY.keys()))
-        raise KeyError(
-            f"Unknown strategy '{name}'. Available: {available}"
-        ) from exc
+    if name.lower() in _REGISTRY:
+        return _REGISTRY[name.lower()]
+    available = ", ".join(sorted(_REGISTRY.keys()))
+    raise KeyError(f"Unknown strategy '{name}'. Available: {available}")
 
 
 def list_strategies() -> list[str]:
-    """Return sorted list of all registered strategy names."""
-    return sorted(_REGISTRY.keys())
+    """Return sorted list of canonical registered strategy names."""
+    return [k for k in sorted(_REGISTRY.keys()) if k.isupper()]

@@ -73,8 +73,8 @@ paths:
     strategies:
       path: "Shared/strategies"
       helpers: "Shared/strategies/_helpers"
-      active_strategy_file: "Shared/strategies/classic_floor_mod_v6/classic_floor_mod_v6_1.py"
-      active_strategy_name: "classic_floor_mod_v6_1"
+      active_strategy_file: "Shared/strategies/classic_floor_mod_v6/CFMV0601B.py"
+      active_strategy_name: "CFMV0601B"
       active_db_path: "Shared/Data/Ohlcv_2325Eurusd.duckdb"
       active_table: "ohlcv_eurusd_1m_2025"
       purpose: "Dedicated focus strategy file and active database targets to prevent collateral edits. Each version lives in its own subdirectory (classic_floor_mod_v<N>/)."
