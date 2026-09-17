@@ -107,9 +107,31 @@ tools:
   vbtspike:
     path: "Core/vbtspike"
     purpose: "VectorBT spike backtest engine, telemetry derivation, and DuckDB persistence."
+  mt5bt:
+    path: "Core/mt5-wsl-tstSetup-01"
+    purpose: "MetaTrader 5 Expert Advisor compilation, Strategy Tester automation from WSL, report parsing, and DuckDB storage."
   post_test_enrichment:
     path: "Shared/strategies/_helpers/post-test-enrichment.py"
     purpose: "Post-backtest DuckDB database enrichment pipeline (candlestick patterns & schema verification)."
+
+# MetaTrader 5 Backtest Engine Configuration
+mt5bt:
+  log_level: "INFO"
+  default_tester:
+    deposit: 10000
+    currency: "USD"
+    leverage: 100
+    model: 1              # 0=every tick, 1=1-min OHLC, 2=open prices only
+    shutdown_terminal: true
+  validity:
+    min_trades: 30
+    default_sample_type: "in_sample"
+  runner:
+    timeout_seconds: 900
+    max_retries: 2
+    poll_interval_seconds: 5
+    stable_checks_required: 2
+  trust_window_days: 30
 
 # VectorBT Spike Engine Runtime Configuration
 vbtspike:

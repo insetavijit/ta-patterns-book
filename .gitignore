@@ -13,6 +13,7 @@ __trash
 tmp
 Shared/INPs
 outs/
+Shared/cnf.local.yaml
 
 # Generated output assets & images
 *.png

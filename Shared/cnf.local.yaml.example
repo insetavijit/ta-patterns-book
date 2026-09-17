@@ -1,0 +1,17 @@
+# Machine-local configuration — NEVER commit this file.
+# Copy this to Shared/cnf.local.yaml and fill in your Windows paths.
+#
+# All paths below are Windows-style (used via wslpath -w internally).
+# UNC paths (//wsl.localhost/...) are also acceptable.
+
+mt5bt:
+  metaeditor_path: "C:\\Program Files\\MetaTrader 5\\metaeditor64.exe"
+  terminal_path: "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
+  mql5_experts_dir: "C:\\Program Files\\MetaTrader 5\\MQL5\\Experts"
+  reports_dir: "C:\\Program Files\\MetaTrader 5\\tester\\report"
+  duckdb_path: "./Shared/Data/mt5bt.duckdb"
+  broker_server: "Eightcap-Demo"
+
+  # Override any shared config values for this machine (optional)
+  # runner:
+  #   timeout_seconds: 1200
