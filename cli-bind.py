@@ -52,15 +52,15 @@ EXCLUDE_DIRS = {
 
 
 def find_cli_specs(workspace_root: Path) -> list[Path]:
-    """Find all `cli-*.yaml` and `cli-*.yml` specification files."""
+    """Find all `cli-*.yaml` and `cli-*.yml` specification files located in their respective tool directories."""
     matched_files: list[Path] = []
 
     for path in sorted(workspace_root.rglob("cli-*.y*ml")):
         # Skip excluded directories
         if any(part in EXCLUDE_DIRS for part in path.parts):
             continue
-        # Avoid treating output as an input
-        if path.name in ("cli.yaml", "cli.yml"):
+        # Avoid treating output as input, and ensure specs live in tool dirs, not in Shared/
+        if path.name in ("cli.yaml", "cli.yml") or "Shared" in path.parts:
             continue
         matched_files.append(path)
 
@@ -84,8 +84,8 @@ def merge_cli_registries(
     spec_files: list[Path],
     verbose: bool = False,
 ) -> dict[str, Any]:
-    """Merge discovered cli-*.yaml specifications into target registry."""
-    # 1. Load existing target file if present
+    """Merge discovered cli-*.yaml specifications into the central target registry."""
+    # 1. Load existing target file if present to preserve registered core commands
     target_data = load_yaml(target_cli_file) if target_cli_file.exists() else {}
     existing_cli_list: list[dict[str, Any]] = target_data.get("cli", [])
     if not isinstance(existing_cli_list, list):
@@ -101,23 +101,25 @@ def merge_cli_registries(
             commands_by_name[name] = entry
             ordered_names.append(name)
 
-    # 2. Process each discovered spec file
+    # 2. Process each discovered spec file in its respective tool directory
     processed_tools: dict[str, dict[str, Any]] = target_data.get("tools", {})
     if not isinstance(processed_tools, dict):
         processed_tools = {}
 
     for spec_path in spec_files:
         rel_spec_path = spec_path.relative_to(workspace_root).as_posix()
+        tool_dir = spec_path.parent.relative_to(workspace_root).as_posix()
         spec_content = load_yaml(spec_path)
 
-        # Extract tool-level metadata if present
+        # Extract tool-level metadata
         tool_meta = spec_content.get("tool")
-        if isinstance(tool_meta, dict) and "name" in tool_meta:
-            tool_name = tool_meta["name"]
+        tool_name = tool_meta.get("name") if isinstance(tool_meta, dict) else spec_path.parent.name
+        if isinstance(tool_meta, dict):
+            tool_meta["dir"] = tool_dir
             tool_meta["spec_file"] = rel_spec_path
             processed_tools[tool_name] = tool_meta
             if verbose:
-                print(f"[INFO] Discovered tool '{tool_name}' in {rel_spec_path}")
+                print(f"[INFO] Discovered tool '{tool_name}' in {tool_dir}")
 
         # Extract command-level entries
         cli_entries = spec_content.get("cli", [])
@@ -129,7 +131,8 @@ def merge_cli_registries(
                 continue
 
             cmd_name = cmd["name"]
-            # Track origin spec file
+            cmd["tool"] = tool_name
+            cmd["tool_dir"] = tool_dir
             cmd["spec_file"] = rel_spec_path
 
             if cmd_name not in commands_by_name:
@@ -137,7 +140,7 @@ def merge_cli_registries(
             commands_by_name[cmd_name] = cmd
 
             if verbose:
-                print(f"  -> Registered command: {cmd_name}")
+                print(f"  -> Registered command: {cmd_name} from {rel_spec_path}")
 
     # 3. Assemble merged structure
     merged_cli_list = [commands_by_name[name] for name in ordered_names]
