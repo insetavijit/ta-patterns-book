@@ -101,6 +101,7 @@ paths:
       duckdb_explorer: "Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py"
       tree: "Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
       upload_to_hf: "Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py"
+      relate: "Utils/util-python-uv-toolset/utils/relate-tool/relate.py"
     purpose: "Helper utilities, subtree toolsets, common math/date functions, and data transformations."
 
 # Utilities & Toolsets Reference (Subtree: util-python-uv-toolset)
@@ -116,6 +117,9 @@ utils:
   upload_to_hf:
     path: "Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py"
     purpose: "CLI tool for uploading datasets, models, and artifacts to Hugging Face Hub."
+  relate:
+    path: "Utils/util-python-uv-toolset/utils/relate-tool/relate.py"
+    purpose: "Codebase cross-reference and dependency finder for scripts, filenames, and modules."
 
 # Project Tools & Executables Reference
 tools:
@@ -132,6 +136,9 @@ tools:
   upload_to_hf:
     path: "Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py"
     purpose: "CLI tool for uploading datasets, models, and artifacts to Hugging Face Hub."
+  relate:
+    path: "Utils/util-python-uv-toolset/utils/relate-tool/relate.py"
+    purpose: "Codebase cross-reference and dependency finder for scripts, filenames, and modules."
   tradebook_tool:
     path: "Core/trade_book_charts"
     purpose: "SmartGrid-packed trade playbook PNG canvas generator and standalone chart packing layout engine (UV workspace package)."
