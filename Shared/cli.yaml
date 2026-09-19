@@ -438,12 +438,13 @@ cli:
   tool_dir: Utils/util-python-uv-toolset/utils/tree-tool
   spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
 - name: tree-visual
-  purpose: Render visual ASCII/Rich directory tree showing Python files and package
-    hierarchies
+  purpose: Render visual ASCII/Rich directory tree showing files and package hierarchies
   usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --tree
     [options]
   options:
   - '--tree, -t : Render visual directory tree structure'
+  - '--find, -f <ext> : Filter visual tree by file extension'
+  - '--match, -m <glob> : Filter visual tree by glob pattern'
   - '--root, -r <dir> : Target subdirectory to render as tree (e.g., Core, Shared)'
   - '--exclude <names...> : Additional directory names to exclude'
   example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --tree
@@ -458,6 +459,8 @@ cli:
     [options]
   options:
   - '--table : Render borderless tabular summary with line count and file size stats'
+  - '--find, -f <ext> : Filter table by file extension'
+  - '--match, -m <glob> : Filter table by glob pattern'
   - '--root, -r <dir> : Restrict table report to specific directory root'
   - '--exclude <names...> : Additional directory names to exclude'
   example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --table
@@ -470,6 +473,8 @@ cli:
     [options]
   options:
   - '--json, -j : Output raw JSON array of file paths'
+  - '--find, -f <ext> : Filter JSON array by file extension'
+  - '--match, -m <glob> : Filter JSON array by glob pattern'
   - '--root, -r <dir> : Target search directory'
   - '--exclude <names...> : Additional directory names to exclude'
   example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --json
@@ -477,11 +482,13 @@ cli:
   tool_dir: Utils/util-python-uv-toolset/utils/tree-tool
   spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
 - name: tree-count
-  purpose: Output single integer count of Python files in the target directory
+  purpose: Output single integer count of matched files in the target directory
   usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --count
     [options]
   options:
-  - '--count, -c : Print only the total count of .py files'
+  - '--count, -c : Print only the total count of files'
+  - '--find, -f <ext> : Count files by extension'
+  - '--match, -m <glob> : Count files by glob pattern'
   - '--root, -r <dir> : Target search directory'
   example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --count
   tool: tree
@@ -521,6 +528,38 @@ cli:
   tool: upload-to-hf
   tool_dir: Utils/util-python-uv-toolset/utils/upload-to-hf-tool
   spec_file: Utils/util-python-uv-toolset/utils/upload-to-hf-tool/cli-upload-to-hf.yaml
+- name: tree-find
+  purpose: Find and list relative paths for files matching a specific extension (e.g.,
+    .ipynb, .yaml, .duckdb)
+  usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --find
+    <ext> [options]
+  options:
+  - '--find, -f <ext> : File extension to search for (e.g., .ipynb, .parquet, .yaml)'
+  - '--tree : Render matches as visual ASCII/Rich directory tree'
+  - '--table : Render matches in borderless table with lines & size'
+  - '--json : Output matches as JSON array'
+  - '--count : Output single integer count of matched files'
+  example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --find
+    .ipynb
+  tool: tree
+  tool_dir: Utils/util-python-uv-toolset/utils/tree-tool
+  spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
+- name: tree-match
+  purpose: Find and list relative paths for files matching a filename glob pattern
+    (e.g., 'cli-*.yaml', '*test*')
+  usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --match
+    <pattern> [options]
+  options:
+  - '--match, -m <glob> : Filename glob pattern to match (e.g., ''cli-*.yaml'', ''*.ex5'')'
+  - '--tree : Render matches as visual ASCII/Rich directory tree'
+  - '--table : Render matches in borderless table with lines & size'
+  - '--json : Output matches as JSON array'
+  - '--count : Output single integer count of matched files'
+  example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --match
+    "cli-*.yaml"
+  tool: tree
+  tool_dir: Utils/util-python-uv-toolset/utils/tree-tool
+  spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
 tools:
   duckdb_explorer:
     name: duckdb_explorer
@@ -541,10 +580,11 @@ tools:
     spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
   tree:
     name: tree
-    version: 1.0.0
+    version: 1.1.0
     executable: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py
     description: Print relative paths, line counts, sizes, directory tree hierarchies,
-      or structured JSON for Python (.py) files in the project.
+      or structured JSON for Python (.py) files by default, or any target file type/pattern
+      via --find and --match.
     output_formats:
     - text
     - tree

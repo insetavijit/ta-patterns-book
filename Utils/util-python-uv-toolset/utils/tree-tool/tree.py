@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """
-tree.py — Print the list of relative paths for each Python (.py) file in the project.
+tree.py — Universal project file tree, listing, and discovery tool.
+
+Lists relative paths, renders visual trees, summary tables, or JSON
+for Python (.py) files by default, or any target file type/pattern via
+--find and --match.
 
 Usage:
-    uv run python Utils/tree.py
-    uv run python Utils/tree.py --tree
-    uv run python Utils/tree.py --table
-    uv run python Utils/tree.py --json
-    uv run python Utils/tree.py --root Core
+    uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py
+    uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --find .ipynb
+    uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --match "cli-*.yaml"
+    uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --tree
+    uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --table
+    uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --json
 """
 
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
 import sys
@@ -38,14 +44,29 @@ DEFAULT_EXCLUDES = {
 }
 
 
-def find_py_files(
+def get_workspace_root(start_dir: Path) -> Path:
+    """Find workspace root directory by looking for pyproject.toml or .git."""
+    current = start_dir.resolve()
+    for parent in [current] + list(current.parents):
+        if (parent / "pyproject.toml").exists() or (parent / ".git").exists():
+            return parent
+    return Path.cwd()
+
+
+def find_files(
     root_dir: Path,
+    find_ext: str | None = None,
+    match_pattern: str | None = None,
     excludes: set[str] | None = None,
     include_all: bool = False,
 ) -> list[Path]:
-    """Find all .py files under root_dir, respecting exclusion rules."""
+    """Find all files under root_dir matching filter/pattern rules, respecting exclusions."""
     ex = set(excludes or DEFAULT_EXCLUDES)
-    py_files: list[Path] = []
+    matched_files: list[Path] = []
+
+    normalized_ext = None
+    if find_ext:
+        normalized_ext = find_ext.lower() if find_ext.startswith(".") else f".{find_ext.lower()}"
 
     for dirpath, dirnames, filenames in os.walk(root_dir, followlinks=False):
         dp = Path(dirpath)
@@ -57,12 +78,32 @@ def find_py_files(
             ]
 
         for fname in filenames:
-            if fname.endswith(".py"):
-                fpath = dp / fname
-                py_files.append(fpath)
+            fpath = dp / fname
 
-    py_files.sort()
-    return py_files
+            # 1. Match extension if specified
+            if normalized_ext and fpath.suffix.lower() != normalized_ext:
+                continue
+
+            # 2. Match glob pattern if specified
+            if match_pattern:
+                rel_candidate = None
+                try:
+                    rel_candidate = str(fpath.relative_to(root_dir))
+                except ValueError:
+                    rel_candidate = str(fpath)
+
+                if not fnmatch.fnmatch(fname, match_pattern) and not fnmatch.fnmatch(rel_candidate, match_pattern):
+                    continue
+
+            # 3. Default: if neither find_ext nor match_pattern is specified, default to .py
+            if not normalized_ext and not match_pattern:
+                if not fname.endswith(".py"):
+                    continue
+
+            matched_files.append(fpath)
+
+    matched_files.sort()
+    return matched_files
 
 
 def render_plain(paths: Sequence[str]) -> None:
@@ -101,13 +142,13 @@ def render_tree(paths: Sequence[str], root_name: str = ".") -> None:
         render_plain(paths)
 
 
-def render_table(paths: Sequence[str], base_dir: Path) -> None:
+def render_table(paths: Sequence[str], base_dir: Path, file_type_label: str = "Files") -> None:
     try:
         from rich.console import Console
         from rich.table import Table
 
         console = Console()
-        table = Table(box=None, title=f"Python Files in {base_dir.name} ({len(paths)} files)")
+        table = Table(box=None, title=f"{file_type_label} in {base_dir.name} ({len(paths)} files)")
         table.add_column("Relative Path", style="cyan")
         table.add_column("Lines", justify="right", style="magenta")
         table.add_column("Size", justify="right", style="green")
@@ -140,7 +181,7 @@ def render_table(paths: Sequence[str], base_dir: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Print the list of relative paths for each Python (.py) file in the project.",
+        description="Print relative paths, tree, or table for Python files or custom extensions/patterns.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -148,6 +189,18 @@ def main() -> None:
         "-r",
         default=None,
         help="Root directory to search (defaults to project workspace root).",
+    )
+    parser.add_argument(
+        "--find",
+        "-f",
+        default=None,
+        help="Find files matching specific extension (e.g. .ipynb, .py, .yaml, .duckdb).",
+    )
+    parser.add_argument(
+        "--match",
+        "-m",
+        default=None,
+        help="Find files matching glob filename pattern (e.g. 'cli-*.yaml', '*test*').",
     )
     parser.add_argument(
         "--tree",
@@ -170,7 +223,7 @@ def main() -> None:
         "--count",
         "-c",
         action="store_true",
-        help="Print only the total count of .py files.",
+        help="Print only the total count of matched files.",
     )
     parser.add_argument(
         "--all",
@@ -189,7 +242,7 @@ def main() -> None:
 
     # Determine workspace root
     here = Path(__file__).resolve().parent
-    repo_root = here.parent if (here.parent / "pyproject.toml").exists() else Path.cwd()
+    repo_root = get_workspace_root(here)
 
     if args.root:
         search_root = Path(args.root).resolve()
@@ -204,11 +257,17 @@ def main() -> None:
     if args.exclude:
         excludes.update(args.exclude)
 
-    py_files = find_py_files(search_root, excludes=excludes, include_all=args.all)
+    files = find_files(
+        search_root,
+        find_ext=args.find,
+        match_pattern=args.match,
+        excludes=excludes,
+        include_all=args.all,
+    )
 
     # Compute relative paths
     rel_paths = []
-    for f in py_files:
+    for f in files:
         try:
             rel = f.relative_to(search_root)
             rel_paths.append(str(rel))
@@ -219,14 +278,22 @@ def main() -> None:
         print(len(rel_paths))
         return
 
+    label = "Files"
+    if args.find:
+        label = f"{args.find} Files"
+    elif args.match:
+        label = f"'{args.match}' Files"
+    elif not args.find and not args.match:
+        label = "Python Files"
+
     if args.json:
         render_json(rel_paths)
     elif args.tree:
         render_tree(rel_paths, root_name=search_root.name)
     elif args.table:
-        render_table(rel_paths, search_root)
+        render_table(rel_paths, search_root, file_type_label=label)
     else:
-        # Default: stdio list of relative paths for each .py file
+        # Default: stdio list of relative paths
         render_plain(rel_paths)
 
 
