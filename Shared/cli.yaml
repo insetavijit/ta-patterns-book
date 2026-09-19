@@ -1,143 +1,501 @@
-# Shared/cli.yaml — Project CLI Workflow & Tool Registry
-# Schema: Validated against standard CLI registry schema
+# Project CLI Workflow Registry
+# Shared/cli.yaml
+# Generated & consolidated by cli-bind.py
 
 cli:
-  # ---------------------------------------------------------------------------
-  # Loss Profiler CLI (Core)
-  # ---------------------------------------------------------------------------
-  - name: "loss-profile"
-    purpose: "Analyze strategy win/loss performance, setup patterns (entry_1..entry_4), holding duration, and projected R:R brackets"
-    usage: "uv run loss-profile [options]"
-    options:
-      - "--dist <axis> : Distribution axis (entry_1, entry_2, entry_3, entry_4, duration, prr, loss, monthly, weekly)"
-      - "--filter <sql> : SQL WHERE clause filter (e.g., 'entry_1 = DR-DR-DR')"
-      - "--sort <col> : Sort order column"
-      - "--top <n> : Limit to top N rows"
-      - "--bottom <n> : Limit to bottom N rows"
-      - "--wins-only : Only inspect winning trades"
-      - "--losses-only : Only inspect losing trades"
-      - "--output <mode> : Output format (table, markdown, json)"
-    example: "uv run loss-profile --dist entry_1"
-    impl: "ta_patterns_book.loss_profile.cli:main"
-
-  # ---------------------------------------------------------------------------
-  # TradeBook & SmartGrid CLI (Core)
-  # ---------------------------------------------------------------------------
-  - name: "trade-book-charts"
-    purpose: "Generate paginated multi-chart candlestick trade playbook PNG sheets with SmartGrid dynamic packing"
-    usage: "uv run trade-book-charts <subcommand> [options]"
-    options:
-      - "tradebook : Render trade playbook charts from DuckDB SQL query"
-      - "smartgrid : Run standalone layout packing engine test bench"
-      - "describe : Introspect machine-readable tool contracts and JSON schema"
-      - "--db <path> : DuckDB database path"
-      - "--sql <query> : SQL query selecting trades to render"
-      - "--ohlcv-table <table> : OHLCV table name"
-      - "--limit, -l <n> : Charts per page (auto-paginates to p1.png, p2.png...)"
-      - "--dry-run : Validate query and layout without rendering images"
-      - "--json : Output structured machine-readable JSON"
-    example: "uv run trade-book-charts describe --pretty"
-    impl: "trade_book_charts.cli:main"
-
-  # ---------------------------------------------------------------------------
-  # VectorBT Backtest & Persistence CLI (Core)
-  # ---------------------------------------------------------------------------
-  - name: "vbtspike"
-    purpose: "VectorBT spike backtest simulation engine, telemetry derivation, and DuckDB ingestion"
-    usage: "uv run vbtspike <subcommand> [options]"
-    options:
-      - "run : Execute strategy backtest with automated DuckDB persistence"
-      - "clean : Clean up backtest tables and views in database (--dry-run / -y)"
-      - "backup : Create on-demand backup snapshot of DuckDB database"
-      - "--strategy <name> : Strategy implementation name"
-      - "--start <YYYY-MM-DD> : Backtest start date"
-      - "--end <YYYY-MM-DD> : Backtest end date"
-      - "--fees <float> : Fee/commission percentage (defaults to 0.0)"
-    example: "uv run vbtspike run --strategy classic_floor_mod_v2 --start 2025-01-01 --end 2025-01-31"
-    impl: "vbtspike.cli:cli"
-
-  # ---------------------------------------------------------------------------
-  # Post-Trade Excursion Analysis CLI (Core)
-  # ---------------------------------------------------------------------------
-  - name: "post-trade-analysis"
-    purpose: "Multi-horizon (15, 30, 60 candles) post-exit Fibonacci runner excursion and SL/BE invalidation tracker"
-    usage: "uv run post-trade-analysis [options]"
-    options:
-      - "--strategy <name> : Strategy name to analyze (alias: pfib-engine)"
-      - "--db <path> : DuckDB database file path"
-      - "--horizons <list> : Comma-separated candle horizons (default: 15,30,60)"
-      - "--format <mode> : Output format (table, json)"
-    example: "uv run post-trade-analysis --strategy classic_floor_mod_v6_1"
-    impl: "post_trade_analysis.cli:main"
-
-  # ---------------------------------------------------------------------------
-  # DuckDB Explorer CLI (Subtree: util-python-uv-toolset)
-  # ---------------------------------------------------------------------------
-  - name: "duckdb-explorer"
-    purpose: "Read-only inspection, SQL querying, schema profiling, Pandas transformations, and export utility for DuckDB"
-    usage: "uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py <db_path> <subcommand> [options]"
-    options:
-      - "list-tables : List all tables, views, and row counts"
-      - "schema <table_name> : Display column data types and nullabilities"
-      - "profile <table_name> : Compute native column summary statistics (SUMMARIZE)"
-      - "query <sql> : Execute arbitrary read-only SQL query"
-      - "pandas <table_name> <expr> : Execute direct Pandas expressions on query or table"
-      - "search-columns <term> : Search for matching columns across database tables"
-      - "export <table/query> : Export query results to Parquet, CSV, or JSON"
-      - "--output <format> : Display format (table, json)"
-    example: "uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py Shared/Data/Ohlcv_2325Eurusd.duckdb list-tables"
-    impl: "Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py"
-
-  # ---------------------------------------------------------------------------
-  # Python Files Tree Tool (Subtree: util-python-uv-toolset)
-  # ---------------------------------------------------------------------------
-  - name: "tree"
-    purpose: "Print formatted directory tree and relative paths for Python (.py) files in project"
-    usage: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py [options]"
-    options:
-      - "--format <mode> : Output format (tree, table, json)"
-      - "--exclude <patterns> : Glob patterns to exclude"
-    example: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
-    impl: "Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
-
-  # ---------------------------------------------------------------------------
-  # Hugging Face Upload Tool (Subtree: util-python-uv-toolset)
-  # ---------------------------------------------------------------------------
-  - name: "upload-to-hf"
-    purpose: "Upload local datasets, database snapshots, models, and artifacts to Hugging Face Hub repositories"
-    usage: "uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py [options]"
-    options:
-      - "--repo <id> : Target Hugging Face Hub repository identifier"
-      - "--file <path> : Local file path to upload"
-      - "--repo-type <type> : Repository type (dataset, model, space)"
-      - "--message <msg> : Commit description message"
-    example: "uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py --help"
-    impl: "Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py"
-
-  # ---------------------------------------------------------------------------
-  # MetaTrader 5 Backtest Runner (Submodule: mt5-wsl-tstSetup-01)
-  # ---------------------------------------------------------------------------
-  - name: "mt5bt"
-    purpose: "Automated compilation of MT5 EAs, WSL Strategy Tester simulation execution, report extraction, and DuckDB storage"
-    usage: "uv run python Core/mt5-wsl-tstSetup-01/Core/mt5-bt.py [options]"
-    options:
-      - "--strategy <name> : Strategy EA name to compile and backtest"
-      - "--start <date> : Backtest start date"
-      - "--end <date> : Backtest end date"
-      - "--model <0|1|2> : Tick model (0=every tick, 1=1-min OHLC, 2=open prices)"
-      - "--deposit <num> : Initial tester deposit in USD"
-    example: "uv run python Core/mt5-wsl-tstSetup-01/Core/mt5-bt.py"
-    impl: "Core/mt5-wsl-tstSetup-01/Core/mt5-bt.py"
-
-  # ---------------------------------------------------------------------------
-  # Post-Test DuckDB Enrichment Pipeline
-  # ---------------------------------------------------------------------------
-  - name: "post-test-enrichment"
-    purpose: "Enrich backtested DuckDB database with candlestick setup patterns (entry_1..entry_4) and schema validation"
-    usage: "uv run python Shared/strategies/_helpers/post-test-enrichment.py [options]"
-    options:
-      - "--db <path> : Target DuckDB file to enrich"
-      - "--force : Overwrite existing enrichment tables"
-      - "--with-info : Generate metadata documentation table"
-    example: "uv run python Shared/strategies/_helpers/post-test-enrichment.py --db Shared/Data/Ohlcv_2325Eurusd.duckdb"
-    impl: "Shared/strategies/_helpers/post-test-enrichment.py"
+- name: loss-profile
+  purpose: Analyze strategy win/loss performance, setup patterns (entry_1..entry_4),
+    holding duration, and projected R:R brackets
+  usage: uv run loss-profile [options]
+  options:
+  - '--dist <axis> : Distribution axis (entry_1, entry_2, entry_3, entry_4, duration,
+    prr, loss, monthly, weekly)'
+  - '--filter <sql> : SQL WHERE clause filter (e.g., ''entry_1 = DR-DR-DR'')'
+  - '--sort <col> : Sort order column'
+  - '--top <n> : Limit to top N rows'
+  - '--bottom <n> : Limit to bottom N rows'
+  - '--wins-only : Only inspect winning trades'
+  - '--losses-only : Only inspect losing trades'
+  - '--output <mode> : Output format (table, markdown, json)'
+  example: uv run loss-profile --dist entry_1
+  impl: ta_patterns_book.loss_profile.cli:main
+- name: trade-book-charts
+  purpose: Generate paginated multi-chart candlestick trade playbook PNG sheets with
+    SmartGrid dynamic packing
+  usage: uv run trade-book-charts <subcommand> [options]
+  options:
+  - 'tradebook : Render trade playbook charts from DuckDB SQL query'
+  - 'smartgrid : Run standalone layout packing engine test bench'
+  - 'describe : Introspect machine-readable tool contracts and JSON schema'
+  - '--db <path> : DuckDB database path'
+  - '--sql <query> : SQL query selecting trades to render'
+  - '--ohlcv-table <table> : OHLCV table name'
+  - '--limit, -l <n> : Charts per page (auto-paginates to p1.png, p2.png...)'
+  - '--dry-run : Validate query and layout without rendering images'
+  - '--json : Output structured machine-readable JSON'
+  example: uv run trade-book-charts describe --pretty
+  impl: trade_book_charts.cli:main
+- name: vbtspike
+  purpose: VectorBT spike backtest simulation engine, telemetry derivation, and DuckDB
+    ingestion
+  usage: uv run vbtspike <subcommand> [options]
+  options:
+  - 'run : Execute strategy backtest with automated DuckDB persistence'
+  - 'clean : Clean up backtest tables and views in database (--dry-run / -y)'
+  - 'backup : Create on-demand backup snapshot of DuckDB database'
+  - '--strategy <name> : Strategy implementation name'
+  - '--start <YYYY-MM-DD> : Backtest start date'
+  - '--end <YYYY-MM-DD> : Backtest end date'
+  - '--fees <float> : Fee/commission percentage (defaults to 0.0)'
+  example: uv run vbtspike run --strategy classic_floor_mod_v2 --start 2025-01-01
+    --end 2025-01-31
+  impl: vbtspike.cli:cli
+- name: post-trade-analysis
+  purpose: Multi-horizon (15, 30, 60 candles) post-exit Fibonacci runner excursion
+    and SL/BE invalidation tracker
+  usage: uv run post-trade-analysis [options]
+  options:
+  - '--strategy <name> : Strategy name to analyze (alias: pfib-engine)'
+  - '--db <path> : DuckDB database file path'
+  - '--horizons <list> : Comma-separated candle horizons (default: 15,30,60)'
+  - '--format <mode> : Output format (table, json)'
+  example: uv run post-trade-analysis --strategy classic_floor_mod_v6_1
+  impl: post_trade_analysis.cli:main
+- name: duckdb-explorer
+  purpose: Read-only inspection, SQL querying, schema profiling, Pandas transformations,
+    and export utility for DuckDB
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db_path> <subcommand> [options]
+  options:
+  - 'list-tables : List all tables, views, and row counts'
+  - 'schema <table_name> : Display column data types and nullabilities'
+  - 'profile <table_name> : Compute native column summary statistics (SUMMARIZE)'
+  - 'query <sql> : Execute arbitrary read-only SQL query'
+  - 'pandas <table_name> <expr> : Execute direct Pandas expressions on query or table'
+  - 'search-columns <term> : Search for matching columns across database tables'
+  - 'export <table/query> : Export query results to Parquet, CSV, or JSON'
+  - '--output <format> : Display format (table, json)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb list-tables
+  impl: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+- name: tree
+  purpose: Print formatted directory tree and relative paths for Python (.py) files
+    in project
+  usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py [options]
+  options:
+  - '--format <mode> : Output format (tree, table, json)'
+  - '--exclude <patterns> : Glob patterns to exclude'
+  example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py
+  impl: Utils/util-python-uv-toolset/utils/tree-tool/tree.py
+- name: upload-to-hf
+  purpose: Upload local datasets, database snapshots, models, and artifacts to Hugging
+    Face Hub repositories
+  usage: uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py
+    [options]
+  options:
+  - '--repo <id> : Target Hugging Face Hub repository identifier'
+  - '--file <path> : Local file path to upload'
+  - '--repo-type <type> : Repository type (dataset, model, space)'
+  - '--message <msg> : Commit description message'
+  example: uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py
+    --help
+  impl: Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py
+- name: mt5bt
+  purpose: Automated compilation of MT5 EAs, WSL Strategy Tester simulation execution,
+    report extraction, and DuckDB storage
+  usage: uv run python Core/mt5-wsl-tstSetup-01/Core/mt5-bt.py [options]
+  options:
+  - '--strategy <name> : Strategy EA name to compile and backtest'
+  - '--start <date> : Backtest start date'
+  - '--end <date> : Backtest end date'
+  - '--model <0|1|2> : Tick model (0=every tick, 1=1-min OHLC, 2=open prices)'
+  - '--deposit <num> : Initial tester deposit in USD'
+  example: uv run python Core/mt5-wsl-tstSetup-01/Core/mt5-bt.py
+  impl: Core/mt5-wsl-tstSetup-01/Core/mt5-bt.py
+- name: post-test-enrichment
+  purpose: Enrich backtested DuckDB database with candlestick setup patterns (entry_1..entry_4)
+    and schema validation
+  usage: uv run python Shared/strategies/_helpers/post-test-enrichment.py [options]
+  options:
+  - '--db <path> : Target DuckDB file to enrich'
+  - '--force : Overwrite existing enrichment tables'
+  - '--with-info : Generate metadata documentation table'
+  example: uv run python Shared/strategies/_helpers/post-test-enrichment.py --db Shared/Data/Ohlcv_2325Eurusd.duckdb
+  impl: Shared/strategies/_helpers/post-test-enrichment.py
+- name: list-tables
+  purpose: List all tables and views with their respective row counts
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> list-tables [options]
+  options:
+  - '--schema <name> : Target catalog schema (default: main)'
+  - '--estimate-counts : Fast row estimate via duckdb_tables().estimated_size'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb list-tables
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: list-schemas
+  purpose: List all schemas in the database
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> list-schemas
+  options: []
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb list-schemas
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: schema
+  purpose: Display column schema, data types, and nullability for a specific table
+    or view
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> schema <table> [options]
+  options:
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb schema ohlcv_eurusd_1m_2025
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: schema-all
+  purpose: Output column schemas for every table and view in the database in a single
+    call
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> schema-all [options]
+  options:
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb schema-all
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: profile
+  purpose: Combined schema inspection, native column statistics (SUMMARIZE), and sample
+    rows
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> profile <table> [options]
+  options:
+  - '-n <count> : Number of sample rows to include (default: 5)'
+  - '--schema <name> : Target catalog schema (default: main)'
+  - '--estimate-counts : Use catalog row estimate'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb profile ohlcv_eurusd_1m_2025
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: sample
+  purpose: Preview N sample rows from a table or view
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> sample <table> [--limit N]
+  options:
+  - '--limit <n> : Number of rows to preview (default: 1000)'
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb sample ohlcv_eurusd_1m_2025 --limit 5
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: summarize
+  purpose: Compute comprehensive per-column summary statistics via DuckDB's native
+    SUMMARIZE
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> summarize <table> [options]
+  options:
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb summarize ohlcv_eurusd_1m_2025
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: row-count
+  purpose: Get exact or estimated row count for a table
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> row-count <table> [options]
+  options:
+  - '--estimate-counts : Fast row estimate via duckdb_tables()'
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb row-count ohlcv_eurusd_1m_2025
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: query
+  purpose: Execute arbitrary SQL query (read-only unless --write is specified)
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> query "<sql>" [options]
+  options:
+  - '--file <path> : Read SQL text from a file instead of positional argument'
+  - '--dry-run : Print what would run without executing'
+  - '--write : Allow mutating SQL statements (CREATE/INSERT/UPDATE/DROP)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb query "SELECT count(*) FROM ohlcv_eurusd_1m_2025"
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: pandas
+  purpose: Execute arbitrary Pandas Python expressions directly on target table or
+    SQL query DataFrame ('df')
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> pandas <table> "<pandas_expr>" [options]
+  options:
+  - '--query <sql> : Custom SQL query to produce the input DataFrame instead of reading
+    table'
+  - '--expr <expr> : Explicit flag alias for the Pandas expression'
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb pandas ohlcv_eurusd_1m_2025 "df.describe()"
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: explain
+  purpose: Show query plan or execution stats for a SQL statement
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> explain "<sql>" [options]
+  options:
+  - '--analyze : Use EXPLAIN ANALYZE to include real execution stats'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb explain "SELECT * FROM ohlcv_eurusd_1m_2025
+    LIMIT 10"
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: validate-sql
+  purpose: Check SQL syntax and catalog validity without executing it
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> validate-sql "<sql>"
+  options: []
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb validate-sql "SELECT open, high, low, close
+    FROM ohlcv_eurusd_1m_2025"
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: search-columns
+  purpose: Find tables and column names matching a keyword
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> search-columns <keyword> [options]
+  options:
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb search-columns pnl
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: search-values
+  purpose: Search for specific data values across column contents in tables
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> search-values <term> [options]
+  options:
+  - '--table <table> : Restrict search to one table (default: all tables in schema)'
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb search-values EURUSD
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: diff-schema
+  purpose: Compare table and column structure against another DuckDB file
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> diff-schema --other <other_db> [options]
+  options:
+  - '--other <path> : Path to DuckDB file to compare against (required)'
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    db1.duckdb diff-schema --other db2.duckdb
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: export
+  purpose: Export a table or arbitrary query result to CSV, JSON, NDJSON, or Parquet
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> export [options]
+  options:
+  - '--table <table> : Target table to export in full'
+  - '--query <sql> : Arbitrary SELECT query to export'
+  - '--format {csv,json,ndjson,parquet} : Output data format'
+  - '--out <path> : Destination file path (prints stdout if omitted for json/ndjson)'
+  - '--offset <n> : Skip rows before exporting (for paging)'
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb export --table ohlcv_eurusd_1m_2025 --format
+    parquet --out export.parquet
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: import
+  purpose: Load a CSV, Parquet, or JSON file into a new table (requires --write)
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> --write import <file> <table> [options]
+  options:
+  - '--replace : Replace table if it already exists'
+  - '--delimiter <char> : CSV field delimiter override'
+  - '--no-header : CSV file has no header row'
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/test.duckdb --write import data.csv new_table
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: stats
+  purpose: High-level database stats (file size, table count, total rows)
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> stats [options]
+  options:
+  - '--estimate-counts : Fast catalog row count estimate'
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb stats
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: checksum
+  purpose: Order-independent content hash of a table for integrity verification
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> checksum <table> [options]
+  options:
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb checksum ohlcv_eurusd_1m_2025
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: indexes
+  purpose: List indexes and constraints defined on a table
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> indexes <table> [options]
+  options:
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb indexes ohlcv_eurusd_1m_2025
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: list-extensions
+  purpose: List loaded and available DuckDB extensions
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> list-extensions
+  options: []
+  example: 'uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    :memory: list-extensions'
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: resample
+  purpose: Resample an OHLCV 1-minute table/view to target timeframe (5m, 15m, 1h,
+    1d) and create a DuckDB VIEW
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> --write resample --src-table <table> --resample <tf> [options]
+  options:
+  - '--src-table <table> : Source 1-minute OHLCV table/view name (required)'
+  - '--resample <tf> : Target timeframe (e.g., 5m, 15m, 1h, 1d) (required)'
+  - '--view <name> : Name of the VIEW to create (defaults to {src_table}_{timeframe})'
+  - '--schema <name> : Target catalog schema (default: main)'
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb --write resample --src-table ohlcv_eurusd_1m_2025
+    --resample 5m
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: health-check
+  purpose: Verify the target file is a valid, uncorrupted, queryable DuckDB database
+  usage: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    <db> health-check
+  options: []
+  example: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    Shared/Data/Ohlcv_2325Eurusd.duckdb health-check
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: version
+  purpose: Print tool and DuckDB library versions
+  usage: 'uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    :memory: version'
+  options: []
+  example: 'uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    :memory: version'
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: describe
+  purpose: Emit the tool's full command and flag surface as JSON for agent self-discovery
+  usage: 'uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    :memory: describe'
+  options: []
+  example: 'uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    :memory: describe'
+  spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+- name: tree-list
+  purpose: Print plain list of relative paths for all Python (.py) files in workspace
+  usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py [options]
+  options:
+  - '--root, -r <dir> : Root directory to search (defaults to project workspace root)'
+  - '--all, -a : Include all files without excluding .venv, __pycache__, or hidden
+    directories'
+  - '--exclude <names...> : Additional directory names to exclude'
+  example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py
+  spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
+- name: tree-visual
+  purpose: Render visual ASCII/Rich directory tree showing Python files and package
+    hierarchies
+  usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --tree
+    [options]
+  options:
+  - '--tree, -t : Render visual directory tree structure'
+  - '--root, -r <dir> : Target subdirectory to render as tree (e.g., Core, Shared)'
+  - '--exclude <names...> : Additional directory names to exclude'
+  example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --tree
+    --root Core
+  spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
+- name: tree-table
+  purpose: Render borderless Rich summary table with line counts, file sizes, and
+    totals
+  usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --table
+    [options]
+  options:
+  - '--table : Render borderless tabular summary with line count and file size stats'
+  - '--root, -r <dir> : Restrict table report to specific directory root'
+  - '--exclude <names...> : Additional directory names to exclude'
+  example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --table
+  spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
+- name: tree-json
+  purpose: Output machine-readable JSON array of relative file paths for agent consumption
+  usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --json
+    [options]
+  options:
+  - '--json, -j : Output raw JSON array of file paths'
+  - '--root, -r <dir> : Target search directory'
+  - '--exclude <names...> : Additional directory names to exclude'
+  example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --json
+  spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
+- name: tree-count
+  purpose: Output single integer count of Python files in the target directory
+  usage: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --count
+    [options]
+  options:
+  - '--count, -c : Print only the total count of .py files'
+  - '--root, -r <dir> : Target search directory'
+  example: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --count
+  spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
+- name: upload-file
+  purpose: Upload local file or DuckDB database to Hugging Face Hub repository
+  usage: uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py
+    --target <path> [options]
+  options:
+  - '--target <path> : Path to local file to upload (e.g., Shared/Data/Ohlcv_2325Eurusd.duckdb)
+    (required)'
+  - '--repo <id> : Hugging Face repo ID in form ''username/repo'' (default: Sarkaravijit123/my-tst-data)'
+  - '--path-in-repo <path> : Destination path inside repo (defaults to basename of
+    --target)'
+  - '--repo-type {dataset,model,space} : Hugging Face repository type (default: dataset)'
+  - '--commit-message <msg> : Commit message for the upload (auto-generated if omitted)'
+  - '--token <token> : Hugging Face API token override (defaults to HF_TOKEN env var)'
+  - '--dry-run : Validate inputs and print execution upload plan without uploading'
+  example: uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py
+    --target "Shared/Data/Ohlcv_2325Eurusd.duckdb" --repo "Sarkaravijit123/my-tst-data"
+    --repo-type dataset --commit-message "Upload EURUSD DuckDB dataset"
+  spec_file: Utils/util-python-uv-toolset/utils/upload-to-hf-tool/cli-upload-to-hf.yaml
+- name: upload-dry-run
+  purpose: Validate local file existence, repository configuration, and target path
+    without executing network upload
+  usage: uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py
+    --target <path> --dry-run [options]
+  options:
+  - '--target <path> : Path to local file to validate (required)'
+  - '--repo <id> : Target Hugging Face repo ID'
+  - '--dry-run : Validate and print plan without network upload'
+  example: uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py
+    --target "Shared/Data/Ohlcv_2325Eurusd.duckdb" --dry-run
+  spec_file: Utils/util-python-uv-toolset/utils/upload-to-hf-tool/cli-upload-to-hf.yaml
+tools:
+  duckdb_explorer:
+    name: duckdb_explorer
+    version: 1.0.0
+    executable: uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py
+    description: Agent-friendly, read-only-by-default CLI tool for inspecting, querying,
+      profiling, and analyzing DuckDB databases.
+    global_options:
+    - '--output {json,ndjson,table,markdown} : Output format (default: json)'
+    - '--limit <n> : Cap on rows returned (default: 1000, 0 disables cap)'
+    - '--write : Enable write operations (INSERT/CREATE/DROP). Off by default'
+    - '--timeout <sec> : Abort running query after seconds'
+    - '--pretty : Pretty-print JSON output'
+    - '--arrays : Return rows as arrays instead of objects'
+    - '--nl : Emit newline-delimited JSON'
+    - '--quiet : Suppress warnings on stderr'
+    spec_file: Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/cli-duck-db-explorar.yaml
+  tree:
+    name: tree
+    version: 1.0.0
+    executable: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py
+    description: Print relative paths, line counts, sizes, directory tree hierarchies,
+      or structured JSON for Python (.py) files in the project.
+    output_formats:
+    - text
+    - tree
+    - table
+    - json
+    default_execution: uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py
+    spec_file: Utils/util-python-uv-toolset/utils/tree-tool/cli-tree.yaml
+  upload-to-hf:
+    name: upload-to-hf
+    version: 1.0.0
+    executable: uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py
+    description: Upload local files, DuckDB database snapshots, model weights, and
+      artifacts to Hugging Face Hub repositories.
+    output_formats:
+    - text
+    default_execution: uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py
+    authentication: Requires HF_TOKEN environment variable or prior login via `huggingface-cli
+      login`.
+    spec_file: Utils/util-python-uv-toolset/utils/upload-to-hf-tool/cli-upload-to-hf.yaml

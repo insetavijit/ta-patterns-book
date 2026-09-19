@@ -147,6 +147,9 @@ tools:
   post_test_enrichment:
     path: "Shared/strategies/_helpers/post-test-enrichment.py"
     purpose: "Post-backtest DuckDB database enrichment pipeline (candlestick patterns & schema verification)."
+  cli_bind:
+    path: "cli-bind.py"
+    purpose: "Consolidates and binds all modular cli-*.yaml specifications across the project into Shared/cli.yaml."
 
 # MetaTrader 5 Backtest Engine Configuration
 mt5bt:
