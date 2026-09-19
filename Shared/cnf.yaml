@@ -10,6 +10,7 @@ repositories:
   trade-book-charts: "Core/trade_book_charts"     # Submodule: SmartGrid chart packing engine & trade playbook PNG renderer
   vbtspike3A: "Core/vbtspike"                     # Submodule: VectorBT backtesting, schema integrity & DuckDB trade ingestion
   mt5-wsl-tstSetup-01: "Core/mt5-wsl-tstSetup-01" # Submodule: MT5 EA WSL compilation, Strategy Tester runner & parity tester
+  util-python-uv-toolset: "Utils/util-python-uv-toolset/utils" # Subtree: reusable Python & DuckDB CLI utilities
 
 paths:
   trash:
@@ -95,7 +96,26 @@ paths:
 
   utils:
     path: "Utils"
-    purpose: "Helper utilities, common math/date functions, and data transformations."
+    subtree: "Utils/util-python-uv-toolset/utils"
+    tools:
+      duckdb_explorer: "Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py"
+      tree: "Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
+      upload_to_hf: "Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py"
+    purpose: "Helper utilities, subtree toolsets, common math/date functions, and data transformations."
+
+# Utilities & Toolsets Reference (Subtree: util-python-uv-toolset)
+utils:
+  root: "Utils/util-python-uv-toolset/utils"
+  duckdb_explorer:
+    path: "Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py"
+    config: "Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/utils.yaml"
+    purpose: "Agent-friendly CLI for inspecting, querying, profiling, searching, and running Pandas operations on DuckDB databases."
+  tree:
+    path: "Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
+    purpose: "Prints stdio list of relative paths for all .py files in project with tree/table formatting options."
+  upload_to_hf:
+    path: "Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py"
+    purpose: "CLI tool for uploading datasets, models, and artifacts to Hugging Face Hub."
 
 # Project Tools & Executables Reference
 tools:
@@ -103,8 +123,15 @@ tools:
     path: "Core/ta_patterns_book/loss_profile"
     purpose: "Strategy loss profiler, monthly, weekly, duration, & pattern distribution reporter."
   duckdb_explorer:
-    path: "Utils/duckdb-explorar-tool/duckdb_explorer.py"
+    path: "Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py"
+    config: "Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/utils.yaml"
     purpose: "Agent-friendly CLI for inspecting, querying, profiling, searching, and running Pandas operations on DuckDB databases."
+  tree:
+    path: "Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
+    purpose: "Prints stdio list of relative paths for all .py files in project with tree/table formatting options."
+  upload_to_hf:
+    path: "Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py"
+    purpose: "CLI tool for uploading datasets, models, and artifacts to Hugging Face Hub."
   tradebook_tool:
     path: "Core/trade_book_charts"
     purpose: "SmartGrid-packed trade playbook PNG canvas generator and standalone chart packing layout engine (UV workspace package)."
