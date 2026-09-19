@@ -25,3 +25,9 @@ This document records explicit user corrections and operational guidelines to pr
 ## 4. Loss Profiler CLI Distribution Contract
 - **Correction**: Do not use individual distribution flags (`--duration-group`, `--loss-group`, `-prr`, `--monthly`, `--weekly`).
 - **Rule**: Always use the unified `--dist <axis>` interface (e.g., `--dist entry_1`, `--dist prr`, `--dist duration`, `--dist loss`, `--dist monthly`, `--dist weekly`) along with composable modifiers (`--wins-only`, `--sort`, `--min-trades`, `--top`, `--bottom`, `--compare`).
+
+---
+
+## 5. File Deletion Policy & Trash Routing
+- **Correction**: Never permanently delete files or scripts outside `__trash/`.
+- **Rule**: Do NOT delete anything outside the `__trash/` directory. If requested to delete, remove, or clean up any file or directory, always move it to `__trash/`. Permanent deletion is strictly restricted to contents inside `__trash/`.

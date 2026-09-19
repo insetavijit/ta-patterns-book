@@ -5,6 +5,7 @@
 - **External CLI Tools Reference:** Always read [`Utils/tools-info.md`](file:///home/avijit/workSpace/Code/ta-patterns-book/Utils/tools-info.md) to discover, inspect, and understand the list of available project CLI tools, their flag contracts, and operational guidelines.
 - **Historical Corrections Log:** Always inspect [`Shared/corrections.md`](file:///home/avijit/workSpace/Code/ta-patterns-book/Shared/corrections.md) to review past user feedback and avoid repeating operational mistakes.
 - **Suo-Moto Artifacts Policy:** Do NOT create any suo-moto artifacts or Markdown (`.md`) files unless explicitly requested by the user. Ask for permission first if you feel the need to create one.
+- **File Deletion Policy:** NEVER delete any file or directory outside the `__trash/` directory. If deletion, removal, or cleanup of any file or folder outside `__trash/` is requested, always MOVE it to `__trash/` instead of deleting it. Only contents already inside `__trash/` may be permanently deleted.
 
 ---
 
