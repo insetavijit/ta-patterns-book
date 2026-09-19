@@ -4,9 +4,9 @@
 
 tool:
   name: "tree"
-  version: "1.1.0"
+  version: "1.2.0"
   executable: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
-  description: "Print relative paths, line counts, sizes, directory tree hierarchies, or structured JSON for Python (.py) files by default, or any target file type/pattern via --find and --match."
+  description: "Universal project file tree, listing, and dependency discovery tool supporting extension filters, glob matches, and codebase cross-reference inspection via --relate."
   output_formats: ["text", "tree", "table", "json"]
   default_execution: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
 
@@ -19,6 +19,19 @@ cli:
       - "--all, -a : Include all files without excluding .venv, __pycache__, or hidden directories"
       - "--exclude <names...> : Additional directory names to exclude"
     example: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
+
+  - name: "tree-relate"
+    purpose: "Inspect codebase cross-references and dependency mentions of a file or script"
+    usage: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --relate <path> [options]"
+    options:
+      - "--relate <path> : Target file, script path, or module name to search for references (required)"
+      - "--py : Restrict references to Python (.py) files only"
+      - "--strict, -s : Only match exact relative path or filename, skipping bare symbol/module stem"
+      - "--table : Render borderless Rich summary table with line numbers and matched snippets"
+      - "--tree : Render visual tree of referencing files"
+      - "--json : Output structured JSON data of all references"
+      - "--count : Output count of referencing files"
+    example: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --relate Shared/strategies/classic_floor_mod_v6/CFMV0601B.py --py"
 
   - name: "tree-find"
     purpose: "Find and list relative paths for files matching a specific extension (e.g., .ipynb, .yaml, .duckdb)"
@@ -49,6 +62,8 @@ cli:
       - "--tree, -t : Render visual directory tree structure"
       - "--find, -f <ext> : Filter visual tree by file extension"
       - "--match, -m <glob> : Filter visual tree by glob pattern"
+      - "--relate <path> : Render tree of files referencing the specified path"
+      - "--py : Filter to Python files only"
       - "--root, -r <dir> : Target subdirectory to render as tree (e.g., Core, Shared)"
       - "--exclude <names...> : Additional directory names to exclude"
     example: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --tree --root Core"
@@ -60,6 +75,8 @@ cli:
       - "--table : Render borderless tabular summary with line count and file size stats"
       - "--find, -f <ext> : Filter table by file extension"
       - "--match, -m <glob> : Filter table by glob pattern"
+      - "--relate <path> : Render table of references to target path"
+      - "--py : Filter to Python files only"
       - "--root, -r <dir> : Restrict table report to specific directory root"
       - "--exclude <names...> : Additional directory names to exclude"
     example: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --table"
@@ -71,6 +88,8 @@ cli:
       - "--json, -j : Output raw JSON array of file paths"
       - "--find, -f <ext> : Filter JSON array by file extension"
       - "--match, -m <glob> : Filter JSON array by glob pattern"
+      - "--relate <path> : Output JSON reference data"
+      - "--py : Filter to Python files only"
       - "--root, -r <dir> : Target search directory"
       - "--exclude <names...> : Additional directory names to exclude"
     example: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --json"
@@ -82,5 +101,7 @@ cli:
       - "--count, -c : Print only the total count of files"
       - "--find, -f <ext> : Count files by extension"
       - "--match, -m <glob> : Count files by glob pattern"
+      - "--relate <path> : Count referencing files"
+      - "--py : Filter to Python files only"
       - "--root, -r <dir> : Target search directory"
     example: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --count"

@@ -97,14 +97,27 @@ def merge_cli_registries(
 
     for entry in existing_cli_list:
         if isinstance(entry, dict) and "name" in entry:
+            spec = entry.get("spec_file")
+            if spec and not (workspace_root / spec).exists():
+                if verbose:
+                    print(f"[INFO] Pruning obsolete command '{entry['name']}' from missing spec: {spec}")
+                continue
             name = entry["name"]
             commands_by_name[name] = entry
             ordered_names.append(name)
 
     # 2. Process each discovered spec file in its respective tool directory
-    processed_tools: dict[str, dict[str, Any]] = target_data.get("tools", {})
-    if not isinstance(processed_tools, dict):
-        processed_tools = {}
+    raw_tools = target_data.get("tools", {})
+    processed_tools: dict[str, dict[str, Any]] = {}
+    if isinstance(raw_tools, dict):
+        for tname, tmeta in raw_tools.items():
+            if isinstance(tmeta, dict):
+                spec = tmeta.get("spec_file")
+                if spec and not (workspace_root / spec).exists():
+                    if verbose:
+                        print(f"[INFO] Pruning obsolete tool '{tname}' from missing spec: {spec}")
+                    continue
+                processed_tools[tname] = tmeta
 
     for spec_path in spec_files:
         rel_spec_path = spec_path.relative_to(workspace_root).as_posix()

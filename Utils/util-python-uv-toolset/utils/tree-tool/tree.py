@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
-tree.py — Universal project file tree, listing, and discovery tool.
+tree.py — Universal project file tree, listing, and dependency discovery tool.
 
 Lists relative paths, renders visual trees, summary tables, or JSON
 for Python (.py) files by default, or any target file type/pattern via
 --find and --match.
 
+Also inspects codebase cross-references and dependencies via --relate,
+with optional --py filter to restrict references to Python files only.
+
 Usage:
     uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py
     uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --find .ipynb
     uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --match "cli-*.yaml"
+    uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --relate Shared/strategies/classic_floor_mod_v6/CFMV0601B.py --py
+    uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --relate duckdb_explorer.py --table
     uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --tree
     uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --table
     uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py --json
@@ -21,9 +26,11 @@ import argparse
 import fnmatch
 import json
 import os
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 DEFAULT_EXCLUDES = {
     ".git",
@@ -41,6 +48,19 @@ DEFAULT_EXCLUDES = {
     "build",
     "dist",
     ".egg-info",
+}
+
+DEFAULT_SCAN_EXTS = {
+    ".py",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".toml",
+    ".md",
+    ".sh",
+    ".ipynb",
+    ".txt",
+    ".ini",
 }
 
 
@@ -106,6 +126,85 @@ def find_files(
     return matched_files
 
 
+def search_references(
+    workspace_root: Path,
+    target_path_input: str,
+    strict: bool = False,
+    only_py: bool = False,
+    excludes: set[str] | None = None,
+    include_all: bool = False,
+) -> tuple[dict[str, str], list[dict[str, Any]]]:
+    """Search workspace files for occurrences of target path, filename, or module stem."""
+    target = Path(target_path_input)
+    target_abs = (workspace_root / target).resolve() if not target.is_absolute() else target.resolve()
+    try:
+        rel_path = target_abs.relative_to(workspace_root).as_posix()
+    except ValueError:
+        rel_path = target.as_posix()
+
+    filename = target.name
+    stem = target.stem
+
+    terms: dict[str, str] = {
+        "path": rel_path,
+        "filename": filename,
+    }
+    if not strict and stem and stem != filename:
+        terms["stem"] = stem
+
+    ex = set(excludes or DEFAULT_EXCLUDES)
+    exts = {".py"} if only_py else DEFAULT_SCAN_EXTS
+    matches: list[dict[str, Any]] = []
+
+    stem_pattern = re.compile(rf"\b{re.escape(stem)}\b") if "stem" in terms else None
+
+    for dirpath, dirnames, filenames in os.walk(workspace_root, followlinks=False):
+        dp = Path(dirpath)
+        if not include_all:
+            dirnames[:] = [
+                d for d in dirnames
+                if d not in ex and not d.startswith(".") and not (dp / d).is_symlink()
+            ]
+
+        for fname in filenames:
+            fpath = dp / fname
+            if fpath.suffix.lower() not in exts:
+                continue
+
+            # Avoid matching the target file against itself
+            if fpath.resolve() == target_abs:
+                continue
+
+            rel_file = fpath.relative_to(workspace_root).as_posix()
+
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                    for line_num, line in enumerate(f, start=1):
+                        stripped = line.strip()
+                        if not stripped:
+                            continue
+
+                        matched_kind = None
+                        if rel_path in line or rel_path.replace("/", "\\") in line:
+                            matched_kind = "path"
+                        elif filename in line:
+                            matched_kind = "filename"
+                        elif stem_pattern and stem_pattern.search(line):
+                            matched_kind = "module/symbol"
+
+                        if matched_kind:
+                            matches.append({
+                                "file": rel_file,
+                                "line_number": line_num,
+                                "match_kind": matched_kind,
+                                "snippet": stripped[:120],
+                            })
+            except Exception:
+                continue
+
+    return terms, matches
+
+
 def render_plain(paths: Sequence[str]) -> None:
     for p in paths:
         print(p)
@@ -138,7 +237,6 @@ def render_tree(paths: Sequence[str], root_name: str = ".") -> None:
 
         console.print(tree)
     except ImportError:
-        # Fallback to plain if rich not installed
         render_plain(paths)
 
 
@@ -179,9 +277,47 @@ def render_table(paths: Sequence[str], base_dir: Path, file_type_label: str = "F
         render_plain(paths)
 
 
+def render_relate_table(terms: dict[str, str], matches: list[dict[str, Any]], unique_files: list[str]) -> None:
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console()
+        title = f"References for '{terms['path']}' ({len(matches)} matches in {len(unique_files)} files)"
+        table = Table(
+            title=title,
+            show_header=True,
+            header_style="bold cyan",
+            box=None,
+            pad_edge=False,
+        )
+        table.add_column("Referencing File", style="bold green")
+        table.add_column("Line", justify="right", style="magenta")
+        table.add_column("Type", style="cyan")
+        table.add_column("Snippet", style="white")
+
+        for m in matches:
+            table.add_row(
+                m["file"],
+                str(m["line_number"]),
+                m["match_kind"],
+                m["snippet"][:90],
+            )
+
+        console.print()
+        console.print(table)
+        console.print(
+            f"\n[bold cyan]Target:[/bold cyan] {terms['path']} | "
+            f"[bold green]Referencing Files:[/bold green] {len(unique_files)} | "
+            f"[bold green]Total Hits:[/bold green] {len(matches)}\n"
+        )
+    except ImportError:
+        render_plain(unique_files)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Print relative paths, tree, or table for Python files or custom extensions/patterns.",
+        description="Print relative paths, tree, or table for Python files, extensions, or cross-references.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -203,6 +339,22 @@ def main() -> None:
         help="Find files matching glob filename pattern (e.g. 'cli-*.yaml', '*test*').",
     )
     parser.add_argument(
+        "--relate",
+        default=None,
+        help="Find all files referencing/importing the specified target path or script.",
+    )
+    parser.add_argument(
+        "--py",
+        action="store_true",
+        help="Restrict search or references to Python (.py) files only.",
+    )
+    parser.add_argument(
+        "--strict",
+        "-s",
+        action="store_true",
+        help="With --relate: only match full path or filename, skipping bare stem/symbol names.",
+    )
+    parser.add_argument(
         "--tree",
         "-t",
         action="store_true",
@@ -217,7 +369,7 @@ def main() -> None:
         "--json",
         "-j",
         action="store_true",
-        help="Output raw JSON array of relative paths.",
+        help="Output raw JSON array of relative paths or relate match details.",
     )
     parser.add_argument(
         "--count",
@@ -240,7 +392,6 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Determine workspace root
     here = Path(__file__).resolve().parent
     repo_root = get_workspace_root(here)
 
@@ -257,15 +408,58 @@ def main() -> None:
     if args.exclude:
         excludes.update(args.exclude)
 
+    # -------------------------------------------------------------------------
+    # Mode A: Cross-Reference Inspection (--relate)
+    # -------------------------------------------------------------------------
+    if args.relate:
+        terms, matches = search_references(
+            workspace_root=search_root,
+            target_path_input=args.relate,
+            strict=args.strict,
+            only_py=args.py,
+            excludes=excludes,
+            include_all=args.all,
+        )
+        unique_files = sorted(set(m["file"] for m in matches))
+
+        if args.count:
+            print(len(unique_files))
+            return
+
+        if args.json:
+            out_data = {
+                "search_terms": terms,
+                "only_py": args.py,
+                "total_matches": len(matches),
+                "unique_files_count": len(unique_files),
+                "referencing_files": unique_files,
+                "matches": matches,
+            }
+            print(json.dumps(out_data, indent=2))
+            return
+
+        if args.tree:
+            render_tree(unique_files, root_name=search_root.name)
+        elif args.table:
+            render_relate_table(terms, matches, unique_files)
+        else:
+            # Default: list unique relative paths of referencing files
+            render_plain(unique_files)
+        return
+
+    # -------------------------------------------------------------------------
+    # Mode B: Standard File Discovery / Tree
+    # -------------------------------------------------------------------------
+    find_ext = ".py" if args.py and not args.find else args.find
+
     files = find_files(
         search_root,
-        find_ext=args.find,
+        find_ext=find_ext,
         match_pattern=args.match,
         excludes=excludes,
         include_all=args.all,
     )
 
-    # Compute relative paths
     rel_paths = []
     for f in files:
         try:
@@ -279,11 +473,11 @@ def main() -> None:
         return
 
     label = "Files"
-    if args.find:
-        label = f"{args.find} Files"
+    if find_ext:
+        label = f"{find_ext} Files"
     elif args.match:
         label = f"'{args.match}' Files"
-    elif not args.find and not args.match:
+    elif not find_ext and not args.match:
         label = "Python Files"
 
     if args.json:
@@ -293,7 +487,6 @@ def main() -> None:
     elif args.table:
         render_table(rel_paths, search_root, file_type_label=label)
     else:
-        # Default: stdio list of relative paths
         render_plain(rel_paths)
 
 
