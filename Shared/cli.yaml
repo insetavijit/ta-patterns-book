@@ -1,0 +1,143 @@
+# Shared/cli.yaml — Project CLI Workflow & Tool Registry
+# Schema: Validated against standard CLI registry schema
+
+cli:
+  # ---------------------------------------------------------------------------
+  # Loss Profiler CLI (Core)
+  # ---------------------------------------------------------------------------
+  - name: "loss-profile"
+    purpose: "Analyze strategy win/loss performance, setup patterns (entry_1..entry_4), holding duration, and projected R:R brackets"
+    usage: "uv run loss-profile [options]"
+    options:
+      - "--dist <axis> : Distribution axis (entry_1, entry_2, entry_3, entry_4, duration, prr, loss, monthly, weekly)"
+      - "--filter <sql> : SQL WHERE clause filter (e.g., 'entry_1 = DR-DR-DR')"
+      - "--sort <col> : Sort order column"
+      - "--top <n> : Limit to top N rows"
+      - "--bottom <n> : Limit to bottom N rows"
+      - "--wins-only : Only inspect winning trades"
+      - "--losses-only : Only inspect losing trades"
+      - "--output <mode> : Output format (table, markdown, json)"
+    example: "uv run loss-profile --dist entry_1"
+    impl: "ta_patterns_book.loss_profile.cli:main"
+
+  # ---------------------------------------------------------------------------
+  # TradeBook & SmartGrid CLI (Core)
+  # ---------------------------------------------------------------------------
+  - name: "trade-book-charts"
+    purpose: "Generate paginated multi-chart candlestick trade playbook PNG sheets with SmartGrid dynamic packing"
+    usage: "uv run trade-book-charts <subcommand> [options]"
+    options:
+      - "tradebook : Render trade playbook charts from DuckDB SQL query"
+      - "smartgrid : Run standalone layout packing engine test bench"
+      - "describe : Introspect machine-readable tool contracts and JSON schema"
+      - "--db <path> : DuckDB database path"
+      - "--sql <query> : SQL query selecting trades to render"
+      - "--ohlcv-table <table> : OHLCV table name"
+      - "--limit, -l <n> : Charts per page (auto-paginates to p1.png, p2.png...)"
+      - "--dry-run : Validate query and layout without rendering images"
+      - "--json : Output structured machine-readable JSON"
+    example: "uv run trade-book-charts describe --pretty"
+    impl: "trade_book_charts.cli:main"
+
+  # ---------------------------------------------------------------------------
+  # VectorBT Backtest & Persistence CLI (Core)
+  # ---------------------------------------------------------------------------
+  - name: "vbtspike"
+    purpose: "VectorBT spike backtest simulation engine, telemetry derivation, and DuckDB ingestion"
+    usage: "uv run vbtspike <subcommand> [options]"
+    options:
+      - "run : Execute strategy backtest with automated DuckDB persistence"
+      - "clean : Clean up backtest tables and views in database (--dry-run / -y)"
+      - "backup : Create on-demand backup snapshot of DuckDB database"
+      - "--strategy <name> : Strategy implementation name"
+      - "--start <YYYY-MM-DD> : Backtest start date"
+      - "--end <YYYY-MM-DD> : Backtest end date"
+      - "--fees <float> : Fee/commission percentage (defaults to 0.0)"
+    example: "uv run vbtspike run --strategy classic_floor_mod_v2 --start 2025-01-01 --end 2025-01-31"
+    impl: "vbtspike.cli:cli"
+
+  # ---------------------------------------------------------------------------
+  # Post-Trade Excursion Analysis CLI (Core)
+  # ---------------------------------------------------------------------------
+  - name: "post-trade-analysis"
+    purpose: "Multi-horizon (15, 30, 60 candles) post-exit Fibonacci runner excursion and SL/BE invalidation tracker"
+    usage: "uv run post-trade-analysis [options]"
+    options:
+      - "--strategy <name> : Strategy name to analyze (alias: pfib-engine)"
+      - "--db <path> : DuckDB database file path"
+      - "--horizons <list> : Comma-separated candle horizons (default: 15,30,60)"
+      - "--format <mode> : Output format (table, json)"
+    example: "uv run post-trade-analysis --strategy classic_floor_mod_v6_1"
+    impl: "post_trade_analysis.cli:main"
+
+  # ---------------------------------------------------------------------------
+  # DuckDB Explorer CLI (Subtree: util-python-uv-toolset)
+  # ---------------------------------------------------------------------------
+  - name: "duckdb-explorer"
+    purpose: "Read-only inspection, SQL querying, schema profiling, Pandas transformations, and export utility for DuckDB"
+    usage: "uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py <db_path> <subcommand> [options]"
+    options:
+      - "list-tables : List all tables, views, and row counts"
+      - "schema <table_name> : Display column data types and nullabilities"
+      - "profile <table_name> : Compute native column summary statistics (SUMMARIZE)"
+      - "query <sql> : Execute arbitrary read-only SQL query"
+      - "pandas <table_name> <expr> : Execute direct Pandas expressions on query or table"
+      - "search-columns <term> : Search for matching columns across database tables"
+      - "export <table/query> : Export query results to Parquet, CSV, or JSON"
+      - "--output <format> : Display format (table, json)"
+    example: "uv run python Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py Shared/Data/Ohlcv_2325Eurusd.duckdb list-tables"
+    impl: "Utils/util-python-uv-toolset/utils/duckdb-explorar-tool/duckdb_explorer.py"
+
+  # ---------------------------------------------------------------------------
+  # Python Files Tree Tool (Subtree: util-python-uv-toolset)
+  # ---------------------------------------------------------------------------
+  - name: "tree"
+    purpose: "Print formatted directory tree and relative paths for Python (.py) files in project"
+    usage: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py [options]"
+    options:
+      - "--format <mode> : Output format (tree, table, json)"
+      - "--exclude <patterns> : Glob patterns to exclude"
+    example: "uv run python Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
+    impl: "Utils/util-python-uv-toolset/utils/tree-tool/tree.py"
+
+  # ---------------------------------------------------------------------------
+  # Hugging Face Upload Tool (Subtree: util-python-uv-toolset)
+  # ---------------------------------------------------------------------------
+  - name: "upload-to-hf"
+    purpose: "Upload local datasets, database snapshots, models, and artifacts to Hugging Face Hub repositories"
+    usage: "uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py [options]"
+    options:
+      - "--repo <id> : Target Hugging Face Hub repository identifier"
+      - "--file <path> : Local file path to upload"
+      - "--repo-type <type> : Repository type (dataset, model, space)"
+      - "--message <msg> : Commit description message"
+    example: "uv run python Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py --help"
+    impl: "Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py"
+
+  # ---------------------------------------------------------------------------
+  # MetaTrader 5 Backtest Runner (Submodule: mt5-wsl-tstSetup-01)
+  # ---------------------------------------------------------------------------
+  - name: "mt5bt"
+    purpose: "Automated compilation of MT5 EAs, WSL Strategy Tester simulation execution, report extraction, and DuckDB storage"
+    usage: "uv run python Core/mt5-wsl-tstSetup-01/Core/mt5-bt.py [options]"
+    options:
+      - "--strategy <name> : Strategy EA name to compile and backtest"
+      - "--start <date> : Backtest start date"
+      - "--end <date> : Backtest end date"
+      - "--model <0|1|2> : Tick model (0=every tick, 1=1-min OHLC, 2=open prices)"
+      - "--deposit <num> : Initial tester deposit in USD"
+    example: "uv run python Core/mt5-wsl-tstSetup-01/Core/mt5-bt.py"
+    impl: "Core/mt5-wsl-tstSetup-01/Core/mt5-bt.py"
+
+  # ---------------------------------------------------------------------------
+  # Post-Test DuckDB Enrichment Pipeline
+  # ---------------------------------------------------------------------------
+  - name: "post-test-enrichment"
+    purpose: "Enrich backtested DuckDB database with candlestick setup patterns (entry_1..entry_4) and schema validation"
+    usage: "uv run python Shared/strategies/_helpers/post-test-enrichment.py [options]"
+    options:
+      - "--db <path> : Target DuckDB file to enrich"
+      - "--force : Overwrite existing enrichment tables"
+      - "--with-info : Generate metadata documentation table"
+    example: "uv run python Shared/strategies/_helpers/post-test-enrichment.py --db Shared/Data/Ohlcv_2325Eurusd.duckdb"
+    impl: "Shared/strategies/_helpers/post-test-enrichment.py"
