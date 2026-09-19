@@ -30,10 +30,13 @@ Shared/OUTs/
 *.duckdb.wal
 *.csv
 *.parquet
+*.perquet
 
 # EXCEPT data files inside Shared/Data/
 !Shared/Data/
 !Shared/Data/**
+*.duckdb.wal
+Shared/Data/*.duckdb.wal
 
 # Strategy drafts & dumps
 .dump/

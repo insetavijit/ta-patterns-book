@@ -59,7 +59,9 @@ from compare_trade_by_trade import (
     render_summary_diagnostics,
 )
 
-_RUNNER_SCRIPT = _REPO_ROOT / "Core" / "mt5-wsl-tstSetup-01" / ".tmp" / "run_mt5_test.py"
+_RUNNER_SCRIPT = _REPO_ROOT / "Core" / "mt5-wsl-tstSetup-01" / "Core" / "run_mt5_test.py"
+if not _RUNNER_SCRIPT.exists():
+    _RUNNER_SCRIPT = _REPO_ROOT / "Core" / "mt5-wsl-tstSetup-01" / ".tmp" / "run_mt5_test.py"
 _DEFAULT_OUT_DIR = _REPO_ROOT / "Shared" / "OUTs" / "duckdb"
 _COMMON_FILES_DIR = Path("/mnt/c/Users/avijit/AppData/Roaming/MetaQuotes/Terminal/Common/Files")
 
@@ -74,18 +76,42 @@ def resolve_strategy_instance(strategy_name: str) -> tuple[Any, str]:
         candidates = [
             _REPO_ROOT / "Shared" / "strategies" / "classic_floor_mod_v6" / f"{strategy_name}.py",
             _REPO_ROOT / "Core" / "strategies" / f"{strategy_name}.py",
+            _REPO_ROOT / "Shared" / "strategies" / f"{strategy_name}.py",
         ]
+        target_stem = strategy_name.lower().replace("-", "").replace("_", "")
+        for base_dir in [
+            _REPO_ROOT / "Shared" / "strategies" / "classic_floor_mod_v6",
+            _REPO_ROOT / "Core" / "strategies",
+        ]:
+            if base_dir.exists():
+                for p in base_dir.glob("*.py"):
+                    if p.stem.lower().replace("-", "").replace("_", "") == target_stem:
+                        candidates.insert(0, p)
+
         for cand in candidates:
             if cand.exists():
                 import importlib.util
-                spec = importlib.util.spec_from_file_location(cand.stem, cand)
+                spec = importlib.util.spec_from_file_location(cand.stem.replace("-", "_"), cand)
                 if spec and spec.loader:
                     mod = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(mod)
-                    for cls_name in (strategy_name, "CFMV0601B", "Strategy"):
+                    candidate_classes = [
+                        strategy_name,
+                        strategy_name.replace("-", "").replace("_", ""),
+                        "CFMV0601C1",
+                        "CFMV0601C_1",
+                        "CFMV0601C",
+                        "CFMV0601B",
+                        "Strategy",
+                    ]
+                    for cls_name in candidate_classes:
                         if hasattr(mod, cls_name):
                             inst = getattr(mod, cls_name)()
                             return inst, strategy_name
+                    for attr_name in dir(mod):
+                        attr = getattr(mod, attr_name)
+                        if isinstance(attr, type) and hasattr(attr, "generate_signals") and not attr_name.startswith("_"):
+                            return attr(), strategy_name
         raise ValueError(f"Could not resolve strategy: {strategy_name}")
 
 
@@ -144,17 +170,19 @@ def run_vbt_backtest(
     df_ohlcv: pd.DataFrame,
     console: Console,
 ) -> list[dict[str, Any]]:
-    """Execute VectorBT backtest on exact same OHLCV with allow_concurrent_trades=False."""
-    console.print(f"\n[bold cyan]▶ Step 2: Running VectorBT Engine ({strategy_name} | Blocking: Concurrent=False)...[/bold cyan]")
+    """Execute VectorBT backtest on exact same OHLCV."""
+    is_blocking = "b" in strategy_name.lower()
+    mode_str = "Blocking: Concurrent=False" if is_blocking else "Concurrent: Non-Blocking"
+    console.print(f"\n[bold cyan]▶ Step 2: Running VectorBT Engine ({strategy_name} | {mode_str})...[/bold cyan]")
     strat_inst, _ = resolve_strategy_instance(strategy_name)
 
     df_feed = df_ohlcv.copy()
     if "timestamp" in df_feed.columns and not isinstance(df_feed.index, pd.DatetimeIndex):
         df_feed = df_feed.set_index("timestamp").sort_index()
 
-    # Explicitly enforce blocking mode
-    params = {"allow_concurrent_trades": False}
-    entries, exits = strat_inst.generate_signals(df_feed, params=params)
+    # Pass appropriate blocking mode if applicable
+    params = {"allow_concurrent_trades": False} if is_blocking else {}
+    res = strat_inst.generate_signals(df_feed, params=params)
 
     completed_trades = getattr(strat_inst, "completed_trades", [])
     if not completed_trades:
@@ -162,6 +190,8 @@ def run_vbt_backtest(
         inner = getattr(strat_inst, "_inner", None)
         if inner:
             completed_trades = getattr(inner, "completed_trades", [])
+        elif isinstance(res, tuple) and len(res) == 3 and isinstance(res[2], pd.DataFrame) and not res[2].empty:
+            completed_trades = res[2].to_dict("records")
 
     return completed_trades
 
@@ -420,7 +450,9 @@ def main() -> None:
 
     console.print("[bold yellow]══════════════════════════════════════════════════════════[/bold yellow]")
     console.print(f"[bold]        Sequential MT5 & VectorBT Comparison Workflow[/bold]")
-    console.print(f" Strategy : [bold yellow]{args.strategy}[/bold yellow] (Blocking Mode: Concurrent=False)")
+    is_blk = "b" in args.strategy.lower()
+    mode_desc = "Blocking Mode: Concurrent=False" if is_blk else "Concurrent Mode: Non-Blocking"
+    console.print(f" Strategy : [bold yellow]{args.strategy}[/bold yellow] ({mode_desc})")
     console.print(f" Symbol/TF: [bold]{args.symbol}[/bold] / [bold]{args.tf}[/bold] | {args.from_date} -> {args.to_date}")
     console.print("[bold yellow]══════════════════════════════════════════════════════════[/bold yellow]")
 

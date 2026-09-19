@@ -4,6 +4,13 @@ project:
   name: ta-patterns-book
   package_manager: uv
 
+# Git Repositories & Submodules
+repositories:
+  ta-patterns-book: "."                            # Root repository: strategies, pattern analysis & post-trade diagnostics
+  trade-book-charts: "Core/trade_book_charts"     # Submodule: SmartGrid chart packing engine & trade playbook PNG renderer
+  vbtspike3A: "Core/vbtspike"                     # Submodule: VectorBT backtesting, schema integrity & DuckDB trade ingestion
+  mt5-wsl-tstSetup-01: "Core/mt5-wsl-tstSetup-01" # Submodule: MT5 EA WSL compilation, Strategy Tester runner & parity tester
+
 paths:
   trash:
     path: "__trash"

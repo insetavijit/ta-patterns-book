@@ -136,19 +136,40 @@ def load_and_prepare_ohlcv(
 
 def reconstruct_trades(data: dict[str, Any]) -> list[dict[str, Any]]:
     deals = data.get("deals", [])
-    in_deals = [d for d in deals if d.get("entry") == "IN" and d.get("type") in ("BUY", "SELL")]
-    out_deals = [d for d in deals if d.get("entry") == "OUT" and d.get("type") in ("BUY", "SELL")]
+    has_pos_id = any(d.get("position_id") for d in deals)
 
     strategy_name = data.get("strategy", "ClassicFloorModV6_1")
     symbol = data.get("symbol", "EURUSDm")
     period = data.get("period", "PERIOD_M1")
 
-    trades: list[dict[str, Any]] = []
-    trade_count = min(len(in_deals), len(out_deals))
+    if has_pos_id:
+        pos_in: dict[int, dict[str, Any]] = {}
+        pos_out: dict[int, dict[str, Any]] = {}
+        for d in deals:
+            entry_type = str(d.get("entry", "")).upper()
+            dtype = str(d.get("type", "")).upper()
+            if dtype not in ("BUY", "SELL"):
+                continue
+            pid = int(d.get("position_id", 0))
+            if entry_type == "IN":
+                pos_in[pid] = d
+            elif entry_type == "OUT":
+                pos_out[pid] = d
 
-    for idx in range(trade_count):
-        tin = in_deals[idx]
-        tout = out_deals[idx]
+        common_pids = sorted(
+            set(pos_in.keys()) & set(pos_out.keys()),
+            key=lambda p: pd.to_datetime(pos_in[p]["time"].replace(".", "-")),
+        )
+        pairs = [(pos_in[p], pos_out[p]) for p in common_pids]
+    else:
+        in_deals = [d for d in deals if d.get("entry") == "IN" and d.get("type") in ("BUY", "SELL")]
+        out_deals = [d for d in deals if d.get("entry") == "OUT" and d.get("type") in ("BUY", "SELL")]
+        trade_count = min(len(in_deals), len(out_deals))
+        pairs = [(in_deals[idx], out_deals[idx]) for idx in range(trade_count)]
+
+    trades: list[dict[str, Any]] = []
+
+    for idx, (tin, tout) in enumerate(pairs):
 
         entry_time = pd.to_datetime(tin["time"].replace(".", "-"), utc=True)
         exit_time = pd.to_datetime(tout["time"].replace(".", "-"), utc=True)
