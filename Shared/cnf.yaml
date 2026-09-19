@@ -132,9 +132,6 @@ tools:
   upload_to_hf:
     path: "Utils/util-python-uv-toolset/utils/upload-to-hf-tool/upload-to-hf.py"
     purpose: "CLI tool for uploading datasets, models, and artifacts to Hugging Face Hub."
-  relate:
-    path: "relate.py"
-    purpose: "Root launcher delegating to tree.py --relate for codebase cross-reference and dependency inspection."
   tradebook_tool:
     path: "Core/trade_book_charts"
     purpose: "SmartGrid-packed trade playbook PNG canvas generator and standalone chart packing layout engine (UV workspace package)."
