@@ -147,6 +147,15 @@ tools:
   post_test_enrichment:
     path: "Shared/strategies/_helpers/post-test-enrichment.py"
     purpose: "Post-backtest DuckDB database enrichment pipeline (candlestick patterns & schema verification)."
+  compare_trade_by_trade:
+    path: "Core/compare-trade-by-trade.py"
+    purpose: "Granular trade-by-trade comparison engine matching MT5 and VectorBT trades in DuckDB."
+  comparison_workflow:
+    path: "Core/comparision-workflow.py"
+    purpose: "Automated sequential MT5 & VectorBT backtest and trade alignment comparison workflow."
+  dn_ohlcv:
+    path: "Core/dn-ohlcv.py"
+    purpose: "Dukascopy historical OHLCV downloader delegating to Core/vbtspike/Core/dn-ducas.py."
   cli_bind:
     path: "cli-bind.py"
     purpose: "Consolidates and binds all modular cli-*.yaml specifications across the project into Shared/cli.yaml."
